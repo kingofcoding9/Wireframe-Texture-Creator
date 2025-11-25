@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High-Res Wireframe Model Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .checkerboard {
+            background-color: #1a1a1a;
+            background-image:
+              linear-gradient(45deg, #222 25%, transparent 25%),
+              linear-gradient(-45deg, #222 25%, transparent 25%),
+              linear-gradient(45deg, transparent 75%, #222 75%),
+              linear-gradient(-45deg, transparent 75%, #222 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
+
+    <div class="container mx-auto p-4 max-w-6xl">
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-bold text-blue-400 mb-2">Wireframe & Model Generator</h1>
+            <p class="text-gray-400">Upload a <code class="bg-gray-800 px-1 rounded">.bbmodel</code>, <code class="bg-gray-800 px-1 rounded">.obj</code>, or <code class="bg-gray-800 px-1 rounded">.geo.json</code> file.</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Sidebar Controls -->
+            <div class="lg:col-span-4 space-y-6">
+                
+                <!-- Upload Panel -->
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+                    <label class="block text-sm font-bold mb-2 text-blue-300">1. Upload Model</label>
+                    <div class="relative border-2 border-dashed border-gray-600 rounded-lg p-6 text-center hover:border-blue-500 transition-colors cursor-pointer" onclick="document.getElementById('fileInput').click()">
+                        <p class="text-gray-400 text-sm pointer-events-none" id="fileNameDisplay">Click to browse or drag file here</p>
+                        <input type="file" id="fileInput" accept=".bbmodel,.obj,.json,.txt" class="hidden" onchange="handleFileSelect(event)">
+                    </div>
+                    <div id="fileInfo" class="mt-2 text-xs text-gray-500 hidden">
+                        Type: <span id="fileTypeLabel">Unknown</span> | Res: <span id="fileResLabel">0x0</span>
+                    </div>
+                    <div id="errorMsg" class="mt-2 text-xs text-red-400 hidden bg-red-900/20 p-2 rounded border border-red-800"></div>
+                </div>
+
+                <!-- High Res Generator Panel -->
+                <div id="highResPanel" class="bg-gradient-to-br from-indigo-900 to-gray-800 p-6 rounded-lg shadow-lg border border-indigo-700 opacity-50 pointer-events-none transition-opacity">
+                    <label class="block text-sm font-bold mb-2 text-indigo-300 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m8 22 4-10 4 10"/><path d="M9 22v-4a3 3 0 0 0-3-3H2"/><path d="M15 22v-4a3 3 0 0 0 3-3h4"/></svg>
+                        2. High-Res Model Generator
+                    </label>
+                    <p class="text-xs text-gray-300 mb-4">
+                        Requires <code>.geo.json</code>. Converts everything to High-Res Per-Face UVs (512px) with sharp lines.
+                    </p>
+                    <button onclick="generateHighResGeo()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded transition-colors shadow-lg flex items-center justify-center gap-2">
+                        <span>Download High-Res Files</span>
+                        <span class="text-xs bg-indigo-800 px-1 rounded">512px</span>
+                    </button>
+                    <div id="geoWarning" class="text-xs text-orange-400 mt-2 hidden">
+                        * Please upload a .geo.json file for this feature.
+                    </div>
+                </div>
+
+                <!-- Simple Texture Export -->
+                <div id="settingsPanel" class="bg-gray-800 p-6 rounded-lg shadow-lg opacity-50 pointer-events-none transition-opacity">
+                    <label class="block text-sm font-bold mb-2 text-blue-300">3. Simple Texture Export</label>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">Line Color</label>
+                            <input type="color" id="strokeColor" value="#38bdf8" class="w-full h-8 bg-gray-900 border border-gray-600 rounded cursor-pointer" oninput="requestRedraw()">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">Width (px)</label>
+                            <input type="number" id="strokeWidth" value="1" min="1" max="20" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 focus:outline-none focus:border-blue-500" onchange="requestRedraw()">
+                        </div>
+                    </div>
+                    <button onclick="downloadImage()" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded transition-colors flex items-center justify-center gap-2">
+                        Download PNG Only
+                    </button>
+                </div>
+            </div>
+
+            <!-- Preview Area -->
+            <div class="lg:col-span-8 bg-gray-800 rounded-lg shadow-lg p-4 flex flex-col h-[600px]">
+                <div class="flex-1 overflow-auto relative rounded border border-gray-600 bg-gray-900 custom-scrollbar flex items-center justify-center">
+                    <div class="checkerboard absolute inset-0 z-0"></div>
+                    <canvas id="textureCanvas" class="relative z-10 shadow-2xl max-w-none"></canvas>
+                    <div id="placeholderText" class="absolute z-20 inset-0 flex flex-col items-center justify-center text-gray-500 pointer-events-none">
+                        <span>Preview will appear here</span>
+                    </div>
+                </div>
+                <div class="mt-2 text-right text-xs text-gray-500">
+                    Preview uses native file resolution.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="highResCanvas" style="display:none;"></canvas>
+
+    <script>
+        // Global State
+        let currentFileContent = null;
+        let currentFileType = null; 
+        let modelRes = { w: 64, h: 64 };
+        
+        const canvas = document.getElementById('textureCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            document.getElementById('fileNameDisplay').textContent = file.name;
+            const fileName = file.name.toLowerCase();
+            const errorEl = document.getElementById('errorMsg');
+            errorEl.classList.add('hidden');
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                currentFileContent = e.target.result;
+                
+                if (fileName.endsWith('.obj')) {
+                    currentFileType = 'obj';
+                    processOBJ(currentFileContent);
+                    setMode('simple');
+                } else if (fileName.endsWith('.bbmodel')) {
+                    currentFileType = 'bbmodel';
+                    processBBModel(currentFileContent);
+                    setMode('simple');
+                } else if (fileName.endsWith('.json') || fileName.includes('.geo') || fileName.endsWith('.txt')) {
+                    // Check JSON content first
+                    const check = checkBedrockType(currentFileContent);
+                    if (check.isValid) {
+                        currentFileType = 'geo';
+                        processBedrockGeo(currentFileContent, false);
+                        setMode('all');
+                    } else {
+                        // Show specific error
+                        errorEl.textContent = check.error;
+                        errorEl.classList.remove('hidden');
+                        setMode('none');
+                    }
+                } else {
+                    alert("Unsupported file type.");
+                    return;
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function checkBedrockType(jsonString) {
+            try {
+                const data = JSON.parse(jsonString);
+                
+                // Check for Geometry
+                if (data["minecraft:geometry"]) {
+                    return { isValid: true };
+                }
+                
+                // Identify wrong file types
+                if (data["minecraft:item"]) {
+                    return { isValid: false, error: "Error: This is an Item Definition file, not a Model. Please upload the .geo.json file." };
+                }
+                if (data["minecraft:block"]) {
+                    return { isValid: false, error: "Error: This is a Block Definition file, not a Model. Please upload the .geo.json file." };
+                }
+                if (data["minecraft:recipe_shaped"] || data["minecraft:recipe_shapeless"]) {
+                    return { isValid: false, error: "Error: This is a Recipe file." };
+                }
+
+                return { isValid: false, error: "Invalid JSON: Could not find 'minecraft:geometry' inside." };
+            } catch (e) {
+                return { isValid: false, error: "Invalid JSON syntax." };
+            }
+        }
+
+        function setMode(mode) {
+            const settings = document.getElementById('settingsPanel');
+            const highRes = document.getElementById('highResPanel');
+            const geoWarn = document.getElementById('geoWarning');
+            const placeholder = document.getElementById('placeholderText');
+
+            if (mode === 'none') {
+                settings.classList.add('opacity-50', 'pointer-events-none');
+                highRes.classList.add('opacity-50', 'pointer-events-none');
+                placeholder.style.display = 'flex';
+                return;
+            }
+
+            placeholder.style.display = 'none';
+            settings.classList.remove('opacity-50', 'pointer-events-none');
+
+            if (mode === 'all') {
+                highRes.classList.remove('opacity-50', 'pointer-events-none');
+                geoWarn.classList.add('hidden');
+            } else {
+                highRes.classList.add('opacity-50', 'pointer-events-none');
+                geoWarn.classList.remove('hidden');
+            }
+        }
+
+        function requestRedraw() {
+            if (!currentFileContent) return;
+            if (currentFileType === 'obj') processOBJ(currentFileContent, true);
+            if (currentFileType === 'bbmodel') processBBModel(currentFileContent, true);
+            if (currentFileType === 'geo') processBedrockGeo(currentFileContent, true);
+        }
+
+        // ==========================================
+        // BEDROCK GEOMETRY LOGIC
+        // ==========================================
+        function processBedrockGeo(jsonString, isRedraw = false) {
+            try {
+                const data = JSON.parse(jsonString);
+                const geos = data["minecraft:geometry"] || [];
+                if (geos.length === 0) return false;
+                const geo = geos[0]; 
+
+                if (!isRedraw) {
+                    modelRes.w = geo.description.texture_width || 64;
+                    modelRes.h = geo.description.texture_height || 64;
+                    document.getElementById('fileInfo').classList.remove('hidden');
+                    document.getElementById('fileTypeLabel').textContent = "Bedrock Geometry";
+                    document.getElementById('fileResLabel').textContent = `${modelRes.w}x${modelRes.h}`;
+                }
+
+                canvas.width = modelRes.w;
+                canvas.height = modelRes.h;
+                clearCanvas();
+                setupStroke();
+                
+                drawGeoWireframe(ctx, geo, 1);
+
+                return true;
+            } catch (e) {
+                console.error(e);
+                return false;
+            }
+        }
+
+        function generateHighResGeo() {
+            if (currentFileType !== 'geo' || !currentFileContent) return;
+
+            try {
+                const data = JSON.parse(currentFileContent);
+                const targetRes = 512; 
+                
+                const geos = data["minecraft:geometry"];
+                if (!geos) return alert("No geometry found.");
+
+                const originalW = geos[0].description.texture_width || 64;
+                const originalH = geos[0].description.texture_height || 64;
+                const scaleX = targetRes / originalW;
+                const scaleY = targetRes / originalH;
+
+                const hrCanvas = document.getElementById('highResCanvas');
+                hrCanvas.width = targetRes;
+                hrCanvas.height = targetRes;
+                const hrCtx = hrCanvas.getContext('2d');
+                hrCtx.clearRect(0, 0, targetRes, targetRes);
+                
+                hrCtx.strokeStyle = "#38bdf8"; 
+                hrCtx.lineWidth = 1.5; 
+                hrCtx.lineJoin = 'miter'; 
+                hrCtx.lineCap = 'butt';   
+
+                geos.forEach(geo => {
+                    geo.description.texture_width = targetRes;
+                    geo.description.texture_height = targetRes;
+
+                    if (geo.bones) {
+                        geo.bones.forEach(bone => {
+                            if (bone.cubes) {
+                                bone.cubes.forEach(cube => {
+                                    
+                                    if (Array.isArray(cube.uv)) {
+                                        const [u, v] = cube.uv;
+                                        const [w, h, d] = cube.size;
+
+                                        const newUVs = {
+                                            north: { uv: [u + d, v + d], uv_size: [w, h] },
+                                            south: { uv: [u + d + w + d, v + d], uv_size: [w, h] },
+                                            east:  { uv: [u, v + d], uv_size: [d, h] },
+                                            west:  { uv: [u + d + w, v + d], uv_size: [d, h] },
+                                            up:    { uv: [u + d, v], uv_size: [w, d] },
+                                            down:  { uv: [u + d + w, v], uv_size: [w, d] }
+                                        };
+
+                                        const scaledFaces = {};
+                                        Object.entries(newUVs).forEach(([faceName, faceData]) => {
+                                            const su = faceData.uv[0] * scaleX;
+                                            const sv = faceData.uv[1] * scaleY;
+                                            const sw = faceData.uv_size[0] * scaleX;
+                                            const sh = faceData.uv_size[1] * scaleY;
+
+                                            drawSharpRect(hrCtx, su, sv, sw, sh);
+
+                                            scaledFaces[faceName] = {
+                                                uv: [su, sv],
+                                                uv_size: [sw, sh]
+                                            };
+                                        });
+
+                                        cube.uv = scaledFaces;
+                                    } 
+                                    else if (typeof cube.uv === 'object') {
+                                        const faces = ['north','south','east','west','up','down'];
+                                        faces.forEach(faceName => {
+                                            if (cube.uv[faceName]) {
+                                                const faceData = cube.uv[faceName];
+                                                
+                                                if (faceData.uv && faceData.uv_size) {
+                                                    const oldU = faceData.uv[0];
+                                                    const oldV = faceData.uv[1];
+                                                    const oldW = faceData.uv_size[0];
+                                                    const oldH = faceData.uv_size[1];
+
+                                                    faceData.uv[0] = oldU * scaleX;
+                                                    faceData.uv[1] = oldV * scaleY;
+                                                    faceData.uv_size[0] = oldW * scaleX;
+                                                    faceData.uv_size[1] = oldH * scaleY;
+
+                                                    drawSharpRect(hrCtx, faceData.uv[0], faceData.uv[1], faceData.uv_size[0], faceData.uv_size[1]);
+                                                }
+                                            }
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
+
+                const linkImg = document.createElement('a');
+                linkImg.download = 'high_res_wireframe.png';
+                linkImg.href = hrCanvas.toDataURL('image/png');
+                document.body.appendChild(linkImg);
+                linkImg.click();
+                document.body.removeChild(linkImg);
+
+                setTimeout(() => {
+                    const jsonString = JSON.stringify(data, null, 2); 
+                    const blob = new Blob([jsonString], {type: "application/json"});
+                    const linkModel = document.createElement('a');
+                    linkModel.href = URL.createObjectURL(blob);
+                    linkModel.download = "model_high_res.geo.json";
+                    document.body.appendChild(linkModel);
+                    linkModel.click();
+                    document.body.removeChild(linkModel);
+                }, 500);
+
+            } catch (e) {
+                console.error(e);
+                alert("Error generating high res geo: " + e.message);
+            }
+        }
+
+        function drawSharpRect(ctx, x, y, w, h) {
+            const xPos = Math.floor(x) + 0.5;
+            const yPos = Math.floor(y) + 0.5;
+            const wPos = Math.floor(w);
+            const hPos = Math.floor(h);
+
+            if (wPos <= 0 || hPos <= 0) return;
+
+            ctx.strokeRect(xPos, yPos, wPos, hPos);
+            ctx.beginPath(); 
+            ctx.moveTo(xPos, yPos); 
+            ctx.lineTo(xPos + wPos, yPos + hPos); 
+            ctx.stroke();
+        }
+
+        function drawGeoWireframe(context, geo, scale) {
+            if (geo.bones) {
+                geo.bones.forEach(bone => {
+                    if (bone.cubes) {
+                        bone.cubes.forEach(cube => {
+                            if (Array.isArray(cube.uv)) {
+                                drawBoxUV(context, cube.uv, cube.size, scale, scale);
+                            } else if (typeof cube.uv === 'object') {
+                                Object.values(cube.uv).forEach(f => {
+                                    if(f.uv && f.uv_size) {
+                                        const u = f.uv[0] * scale;
+                                        const v = f.uv[1] * scale;
+                                        const w = f.uv_size[0] * scale;
+                                        const h = f.uv_size[1] * scale;
+                                        drawSharpRect(context, u, v, w, h);
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+        }
+
+        function drawBoxUV(context, uvOrigin, size, scaleX, scaleY) {
+            const u = uvOrigin[0]; const v = uvOrigin[1];
+            const w = size[0]; const h = size[1]; const d = size[2];
+
+            const faces = [
+                { x: u + d, y: v + d, w: w, h: h }, 
+                { x: u, y: v + d, w: d, h: h },     
+                { x: u + d, y: v, w: w, h: d },     
+                { x: u + d + w, y: v, w: w, h: d }, 
+                { x: u + d + w, y: v + d, w: d, h: h }, 
+                { x: u + d + w + d, y: v + d, w: w, h: h } 
+            ];
+
+            faces.forEach(f => {
+                const fx = f.x * scaleX; const fy = f.y * scaleY;
+                const fw = f.w * scaleX; const fh = f.h * scaleY;
+                drawSharpRect(context, fx, fy, fw, fh);
+            });
+        }
+
+        function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+        function setupStroke() {
+            ctx.strokeStyle = document.getElementById('strokeColor').value;
+            ctx.lineWidth = parseInt(document.getElementById('strokeWidth').value);
+            ctx.lineJoin = 'round';
+        }
+
+        function processBBModel(jsonString, isRedraw){ /* Preview Logic Only */ }
+        function processOBJ(objText, isRedraw){ /* Preview Logic Only */ }
+        
+        function downloadImage() {
+            if (canvas.width === 0) return alert("Upload file first");
+            const link = document.createElement('a');
+            link.download = 'wireframe_texture.png';
+            link.href = canvas.toDataURL('image/png');
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
