@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Texture DNA Lab | Dual Layer</title>
+    <title>Texture DNA Lab | 3D Preview</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js and OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
         /* Base Styles */
         body { background-color: #0b0f19; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
@@ -45,7 +48,6 @@
 
         /* Search Result Modal */
         .search-item:hover { background-color: #1f2937; border-color: #10b981; }
-        .mini-swatch { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); }
         
         input[type=range] { -webkit-appearance: none; background: transparent; }
         input[type=range]::-webkit-slider-thumb {
@@ -57,17 +59,24 @@
         
         optgroup { color: #10b981; font-weight: bold; background: #111827; }
         option { color: #e2e8f0; background: #1f2937; padding: 4px; }
+
+        /* Sidebar Transition for Mobile */
+        .sidebar { transition: transform 0.3s ease-in-out; }
+        .sidebar-closed { transform: translateX(-100%); }
+        @media (min-width: 768px) {
+            .sidebar-closed { transform: none; }
+        }
     </style>
 </head>
 <body class="h-screen flex flex-col text-sm">
 
-    <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-max max-w-[90vw] pointer-events-none"></div>
+    <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-max max-w-[90vw] pointer-events-none"></div>
     <input type="file" id="fileInput" accept=".json,.txt" class="hidden" onchange="app.handleFileSelect(event)">
     <input type="color" id="manualColorPicker" class="opacity-0 absolute -z-10">
     <img id="refImg" class="hidden" crossorigin="anonymous">
 
     <!-- SEARCH RESULTS MODAL -->
-    <div id="searchModal" class="fixed inset-0 bg-black/80 z-40 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+    <div id="searchModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
         <div class="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl w-full max-w-md flex flex-col max-h-[80vh]">
             <div class="p-4 border-b border-gray-800 flex justify-between items-center">
                 <div><h3 class="font-bold text-green-400">Texture Library</h3><p class="text-[10px] text-gray-500" id="searchMeta">Searching...</p></div>
@@ -77,10 +86,18 @@
         </div>
     </div>
 
-    <header class="h-12 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-4 shrink-0 z-20">
-        <div class="flex items-center gap-2">
-            <div class="w-6 h-6 bg-gradient-to-br from-green-500 to-blue-600 rounded flex items-center justify-center font-bold text-white text-xs">T</div>
-            <h1 class="font-bold text-gray-200 tracking-wide">Texture DNA</h1>
+    <!-- HEADER -->
+    <header class="h-12 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-4 shrink-0 z-20 relative">
+        <div class="flex items-center gap-3">
+            <!-- Mobile Menu Toggle -->
+            <button onclick="app.toggleSidebar()" class="md:hidden text-gray-400 hover:text-white">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
+            </button>
+
+            <div class="flex items-center gap-2">
+                <div class="w-6 h-6 bg-gradient-to-br from-green-500 to-blue-600 rounded flex items-center justify-center font-bold text-white text-xs">T</div>
+                <h1 class="font-bold text-gray-200 tracking-wide hidden sm:block">Texture DNA</h1>
+            </div>
         </div>
         <div class="flex items-center gap-3">
             <select id="resSelect" onchange="app.updateResolution()" class="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded px-2 py-1 focus:outline-none">
@@ -94,11 +111,16 @@
         </div>
     </header>
 
-    <div class="main-layout flex-1 flex h-full overflow-hidden">
+    <div class="main-layout flex-1 flex h-full overflow-hidden relative">
         
         <!-- SIDEBAR -->
-        <div class="sidebar w-[340px] bg-gray-900 border-r border-gray-800 flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
+        <div id="sidebar" class="sidebar sidebar-closed md:transform-none absolute md:relative z-30 w-[85vw] md:w-[340px] h-full bg-gray-900 border-r border-gray-800 flex flex-col shrink-0 overflow-y-auto custom-scrollbar shadow-2xl md:shadow-none">
             
+            <!-- Mobile Close Button -->
+            <div class="md:hidden p-2 flex justify-end border-b border-gray-800">
+                <button onclick="app.toggleSidebar()" class="text-gray-400 hover:text-white px-2 py-1 text-xs uppercase font-bold">Close Menu</button>
+            </div>
+
             <!-- 1. Geometry -->
             <div class="p-4 border-b border-gray-800">
                 <div class="flex justify-between items-center mb-2">
@@ -211,23 +233,59 @@
             </div>
         </div>
 
+        <!-- Overlay for Mobile Sidebar -->
+        <div id="sidebarOverlay" onclick="app.toggleSidebar()" class="fixed inset-0 bg-black/50 z-20 hidden md:hidden backdrop-blur-sm"></div>
+
         <!-- CANVAS AREA -->
         <div class="canvas-area flex-1 bg-[#050505] relative flex flex-col min-w-0 overflow-hidden">
-            <div id="canvasWrapper" class="absolute inset-0 checkerboard flex items-center justify-center cursor-grab touch-none">
-                <canvas id="mainCanvas" class="shadow-2xl"></canvas>
+            
+            <!-- View Mode Toggles -->
+            <div class="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-gray-900 border border-gray-700 rounded-full p-1 flex shadow-xl">
+                <button onclick="app.setViewMode('2d')" id="btn-2d" class="px-3 py-1 text-xs font-bold rounded-full bg-green-600 text-white transition-all">2D Map</button>
+                <button onclick="app.setViewMode('3d')" id="btn-3d" class="px-3 py-1 text-xs font-bold rounded-full text-gray-400 hover:text-white transition-all">3D Model</button>
             </div>
+
+            <!-- 2D Viewport -->
+            <div id="view-2d" class="w-full h-full relative">
+                <div id="canvasWrapper" class="absolute inset-0 checkerboard flex items-center justify-center cursor-grab touch-none">
+                    <canvas id="mainCanvas" class="shadow-2xl"></canvas>
+                </div>
+                <!-- 2D Only Controls -->
+                <div class="absolute bottom-4 right-4 flex gap-2 z-20">
+                    <button onclick="app.fitView()" class="bg-gray-800/80 hover:bg-gray-700 text-white p-2 rounded backdrop-blur border border-gray-600 shadow-lg" title="Reset View">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3D Viewport -->
+            <div id="view-3d" class="w-full h-full relative hidden bg-[#0b0f19]">
+                <div id="three-container" class="w-full h-full cursor-move touch-none outline-none"></div>
+                
+                <!-- 3D Controls Overlay -->
+                <div class="absolute bottom-4 left-4 right-4 flex justify-between items-end pointer-events-none">
+                    <div class="text-[10px] text-gray-500 bg-gray-900/50 px-2 py-1 rounded backdrop-blur">
+                        Left: Rotate • Right: Pan • Scroll: Zoom
+                    </div>
+                    <div class="flex gap-2 pointer-events-auto">
+                        <button onclick="Viewer3D.toggleAutoRotate()" class="bg-gray-800/80 hover:bg-gray-700 text-white px-3 py-1.5 rounded backdrop-blur border border-gray-600 shadow-lg text-xs font-bold">
+                            Spin
+                        </button>
+                         <button onclick="Viewer3D.resetCamera()" class="bg-gray-800/80 hover:bg-gray-700 text-white px-3 py-1.5 rounded backdrop-blur border border-gray-600 shadow-lg text-xs font-bold">
+                            Reset Cam
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div id="viewportMsg" class="absolute inset-0 flex flex-col items-center justify-center text-gray-600 pointer-events-none z-10 bg-black/50 backdrop-blur-sm transition-opacity duration-300">
                 <p class="text-sm font-medium text-gray-300">Workspace Empty</p>
                 <p class="text-xs mt-1 opacity-60">Upload .geo.json to begin</p>
             </div>
+            
             <div id="loader" class="absolute inset-0 bg-black/80 z-50 hidden flex-col items-center justify-center backdrop-blur-sm">
                 <div class="loader mb-2"></div>
                 <p id="loaderText" class="text-green-400 text-[10px] font-mono uppercase animate-pulse">Processing...</p>
-            </div>
-            <div class="absolute bottom-4 right-4 flex gap-2 z-20">
-                <button onclick="app.fitView()" class="bg-gray-800/80 hover:bg-gray-700 text-white p-2 rounded backdrop-blur border border-gray-600 shadow-lg" title="Reset View">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
-                </button>
             </div>
         </div>
     </div>
@@ -295,168 +353,101 @@
             },
 
             // --- PRECISE GENERATORS ---
-
             genWood(ctx, w, h, p, scale, chaos, contrast) {
-                // Calculate orientation based on dimensions
                 const isHorz = w >= h;
-                
-                // Scale determines plank count: 0.0-1.0 -> 2-8 planks
-                // Important: Integer plank count for clean lines
                 const plankCount = Math.max(2, Math.floor(2 + scale * 6)); 
                 const plankSize = (isHorz ? h : w) / plankCount;
-
                 for (let i = 0; i < plankCount; i++) {
                     const pos = i * plankSize;
-                    
-                    // Plank Base
                     ctx.fillStyle = (i % 2 === 0) ? p[2] : p[3];
                     if (isHorz) ctx.fillRect(0, pos, w, plankSize);
                     else ctx.fillRect(pos, 0, plankSize, h);
-
-                    // Grain (Inside planks)
                     ctx.fillStyle = p[1];
                     ctx.globalAlpha = 0.1 + (contrast * 0.2);
-                    const grainDensity = Math.floor(plankSize * 0.5); // Lines per plank
-                    
+                    const grainDensity = Math.floor(plankSize * 0.5);
                     for (let g = 0; g < grainDensity; g++) {
                         const gPos = pos + (Math.random() * plankSize);
-                        const len = (isHorz ? w : h) * (0.2 + Math.random() * 0.8); // Length of grain line
+                        const len = (isHorz ? w : h) * (0.2 + Math.random() * 0.8);
                         const start = Math.random() * ((isHorz ? w : h) - len);
-                        
-                        // Chaos adds slight wiggle to grain
                         const wiggle = (Math.random() - 0.5) * (chaos * 4);
-
                         if (isHorz) ctx.fillRect(start, gPos + wiggle, len, 1);
                         else ctx.fillRect(gPos + wiggle, start, 1, len);
                     }
                     ctx.globalAlpha = 1.0;
-
-                    // Separator Line (Dark, crisp)
                     if (i > 0) {
                         ctx.fillStyle = p[0];
                         ctx.globalAlpha = 0.6 + (contrast * 0.4);
-                        if (isHorz) ctx.fillRect(0, pos, w, 1); // Horizontal line
-                        else ctx.fillRect(pos, 0, 1, h); // Vertical line
+                        if (isHorz) ctx.fillRect(0, pos, w, 1);
+                        else ctx.fillRect(pos, 0, 1, h);
                         ctx.globalAlpha = 1.0;
                     }
                 }
             },
-
             genBricks(ctx, w, h, p, scale, chaos, contrast) {
-                ctx.fillStyle = p[0]; ctx.fillRect(0,0,w,h); // Mortar base
-                
+                ctx.fillStyle = p[0]; ctx.fillRect(0,0,w,h);
                 const rows = Math.max(2, Math.floor(2 + scale * 8));
                 const cols = Math.max(2, Math.floor(2 + scale * 4));
-                const bH = h / rows;
-                const bW = w / cols;
-                const gap = Math.max(1, Math.floor(Math.min(w,h) * 0.02)); // 2% gap minimum 1px
-
+                const bH = h / rows; const bW = w / cols;
+                const gap = Math.max(1, Math.floor(Math.min(w,h) * 0.02));
                 for (let r = 0; r < rows; r++) {
                     const offset = (r % 2) * (bW / 2);
-                    // Draw extra column to cover offset wrap
                     for (let c = -1; c <= cols; c++) {
-                        // Chaos: Randomly skip brick (ruined look)
                         if (chaos > 0.5 && Math.random() < (chaos - 0.5) * 0.2) continue;
-
-                        // Color variety
                         const rnd = Math.random();
                         if (rnd > 0.9 - (contrast * 0.2)) ctx.fillStyle = p[4];
                         else if (rnd > 0.4) ctx.fillStyle = p[3];
                         else ctx.fillStyle = p[2];
-
-                        // Chaos: Offset jitter (Horizontal only for structural integrity)
                         const jx = (Math.random() - 0.5) * (chaos * gap * 2);
-                        
-                        ctx.fillRect(
-                            (c * bW) + offset + gap + jx, 
-                            (r * bH) + gap, 
-                            Math.max(1, bW - gap*2), 
-                            Math.max(1, bH - gap*2)
-                        );
+                        ctx.fillRect((c * bW) + offset + gap + jx, (r * bH) + gap, Math.max(1, bW - gap*2), Math.max(1, bH - gap*2));
                     }
                 }
             },
-
             genWeave(ctx, w, h, p, scale, chaos, contrast) {
-                // Thread size depends on scale (smaller scale = bigger threads)
                 const thread = Math.max(2, Math.floor(12 - (scale * 10)));
-                const cols = Math.ceil(w / thread);
-                const rows = Math.ceil(h / thread);
-
+                const cols = Math.ceil(w / thread); const rows = Math.ceil(h / thread);
                 for (let r = 0; r < rows; r++) {
                     for (let c = 0; c < cols; c++) {
                         const isVert = (r + c) % 2 === 0;
-                        
-                        // Base thread color
                         ctx.fillStyle = isVert ? p[2] : p[3];
-                        // Occasional highlight thread
                         if (Math.random() > 0.95) ctx.fillStyle = p[4];
-
                         ctx.fillRect(c*thread, r*thread, thread, thread);
-
-                        // Shading for depth (The "Weave" look)
-                        ctx.fillStyle = '#000';
-                        ctx.globalAlpha = 0.3 * contrast;
-                        if (isVert) {
-                            ctx.fillRect(c*thread, r*thread, 1, thread); // Left shadow
-                            ctx.fillRect((c+1)*thread - 1, r*thread, 1, thread); // Right shadow
-                        } else {
-                            ctx.fillRect(c*thread, r*thread, thread, 1); // Top shadow
-                            ctx.fillRect(c*thread, (r+1)*thread - 1, thread, 1); // Bottom shadow
-                        }
+                        ctx.fillStyle = '#000'; ctx.globalAlpha = 0.3 * contrast;
+                        if (isVert) { ctx.fillRect(c*thread, r*thread, 1, thread); ctx.fillRect((c+1)*thread - 1, r*thread, 1, thread); } 
+                        else { ctx.fillRect(c*thread, r*thread, thread, 1); ctx.fillRect(c*thread, (r+1)*thread - 1, thread, 1); }
                         ctx.globalAlpha = 1.0;
                     }
                 }
             },
-
             genCells(ctx, w, h, p, scale, chaos, contrast) {
-                const cellS = Math.max(4, Math.floor(32 - (scale * 24))); // 4px to 32px
-                
+                const cellS = Math.max(4, Math.floor(32 - (scale * 24)));
                 for (let y = 0; y < h; y += cellS) {
                     for (let x = 0; x < w; x += cellS) {
                         ctx.fillStyle = (Math.random() > 0.5) ? p[3] : p[2];
-                        
-                        // Chaos: Jitter position
                         const jx = (Math.random()-0.5) * (chaos * cellS);
                         const jy = (Math.random()-0.5) * (chaos * cellS);
-                        
-                        // Draw Square Cell (Not circle)
                         const size = Math.max(2, cellS - 1);
                         ctx.fillRect(x + jx, y + jy, size, size);
-
-                        // Highlight center
                         if (contrast > 0.5) {
-                            ctx.fillStyle = p[4];
-                            ctx.globalAlpha = 0.3;
-                            ctx.fillRect(x + jx + size/4, y + jy + size/4, size/2, size/2);
-                            ctx.globalAlpha = 1.0;
+                            ctx.fillStyle = p[4]; ctx.globalAlpha = 0.3;
+                            ctx.fillRect(x + jx + size/4, y + jy + size/4, size/2, size/2); ctx.globalAlpha = 1.0;
                         }
                     }
                 }
             },
-
             genMetal(ctx, w, h, p, scale, chaos, contrast) {
-                const grad = ctx.createLinearGradient(0,0,w,h); 
-                grad.addColorStop(0,p[2]); grad.addColorStop(1,p[4]); 
+                const grad = ctx.createLinearGradient(0,0,w,h); grad.addColorStop(0,p[2]); grad.addColorStop(1,p[4]); 
                 ctx.fillStyle=grad; ctx.fillRect(0,0,w,h);
-                
-                // Scratches
-                ctx.strokeStyle=p[5]; 
-                ctx.globalAlpha=0.2 * contrast;
+                ctx.strokeStyle=p[5]; ctx.globalAlpha=0.2 * contrast;
                 const count = 5 + (chaos * 20);
-                
                 ctx.beginPath();
                 for(let i=0; i<count; i++) {
                     const sx=Math.random()*w, sy=Math.random()*h;
-                    const len=(w*0.2) * (1 + Math.random()); // Length based on scale/size
+                    const len=(w*0.2) * (1 + Math.random());
                     ctx.moveTo(sx,sy); ctx.lineTo(sx+len, sy+len);
                 }
-                ctx.stroke();
-                ctx.globalAlpha=1.0;
+                ctx.stroke(); ctx.globalAlpha=1.0;
             },
-
             genNoise(ctx, w, h, p, scale, chaos, contrast) {
-                // Blocky Noise
                 const count = (w*h) * 0.1 * scale;
                 for(let i=0; i<count; i++) {
                     ctx.fillStyle = (Math.random()>0.5) ? p[1] : p[3];
@@ -466,25 +457,207 @@
                 }
                 ctx.globalAlpha=1.0;
             },
-
             genGrain(ctx, w, h, amt) {
-                ctx.fillStyle = '#000';
-                ctx.globalAlpha = amt * 0.15;
+                ctx.fillStyle = '#000'; ctx.globalAlpha = amt * 0.15;
                 const count = w*h*0.5;
                 for(let i=0; i<count; i++) ctx.fillRect(Math.random()*w, Math.random()*h, 1, 1);
                 ctx.globalAlpha = 1.0;
             },
-
             genGrunge(ctx, w, h, amt) {
                 if(amt < 0.05) return;
-                ctx.fillStyle = '#1a0f00';
-                ctx.globalAlpha = Math.min(0.8, amt);
+                ctx.fillStyle = '#1a0f00'; ctx.globalAlpha = Math.min(0.8, amt);
                 const blobs = 2 + (amt * 10);
                 for(let i=0; i<blobs; i++) {
                     const s = Math.random() * (Math.min(w,h)/2);
-                    if(s > 2) ctx.fillRect(Math.random()*w, Math.random()*h, s, s); // Square grunge
+                    if(s > 2) ctx.fillRect(Math.random()*w, Math.random()*h, s, s);
                 }
                 ctx.globalAlpha = 1.0;
+            }
+        };
+
+        // --- THREE.JS WRAPPER ---
+        const Viewer3D = {
+            scene: null, camera: null, renderer: null, controls: null, modelGroup: null, 
+            isInit: false, material: null,
+            
+            init(container) {
+                if(this.isInit) return;
+                const w = container.clientWidth, h = container.clientHeight;
+                
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x0b0f19);
+
+                // Lighting
+                const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+                this.scene.add(ambient);
+                const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+                dir.position.set(10, 20, 10);
+                this.scene.add(dir);
+                const back = new THREE.DirectionalLight(0xffffff, 0.3);
+                back.position.set(-10, -10, -10);
+                this.scene.add(back);
+
+                // Camera
+                this.camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
+                this.camera.position.set(20, 20, 20);
+
+                // Renderer
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                this.renderer.setSize(w, h);
+                this.renderer.setPixelRatio(window.devicePixelRatio);
+                container.appendChild(this.renderer.domElement);
+
+                // Controls
+                this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.dampingFactor = 0.05;
+                this.controls.screenSpacePanning = true;
+
+                // Material
+                this.material = new THREE.MeshStandardMaterial({ 
+                    side: THREE.DoubleSide, 
+                    transparent: true,
+                    alphaTest: 0.1
+                });
+
+                this.isInit = true;
+                this.animate();
+            },
+
+            loadGeometry(geoData, textureCanvas, resolution) {
+                if(!this.isInit || !geoData) return;
+                if(this.modelGroup) this.scene.remove(this.modelGroup);
+                this.modelGroup = new THREE.Group();
+
+                // Texture
+                const tex = new THREE.CanvasTexture(textureCanvas);
+                tex.magFilter = THREE.NearestFilter;
+                tex.minFilter = THREE.NearestFilter;
+                tex.flipY = false;
+                this.material.map = tex;
+                this.material.map.needsUpdate = true;
+
+                const geo = geoData["minecraft:geometry"][0];
+                // UV FIX: Use the geometry's definition for UV math, NOT the high-res canvas size.
+                const texW = geo.description.texture_width || 64;
+                const texH = geo.description.texture_height || 64;
+                
+                const bounds = new THREE.Box3();
+
+                geo.bones?.forEach(bone => {
+                    if(!bone.cubes) return;
+                    const group = new THREE.Group();
+                    
+                    if (bone.pivot) {
+                        group.position.set(bone.pivot[0], bone.pivot[1], bone.pivot[2]);
+                    }
+
+                    bone.cubes.forEach(cube => {
+                        const [w, h, d] = cube.size;
+                        const [x, y, z] = cube.origin;
+                        
+                        const geometry = new THREE.BoxGeometry(w, h, d);
+                        const uvs = geometry.attributes.uv;
+
+                        const mapFace = (faceIdx, u, v, uw, uh) => {
+                            const i = faceIdx * 4;
+                            const x1 = u / texW; 
+                            const y1 = v / texH;
+                            const x2 = (u + uw) / texW;
+                            const y2 = (v + uh) / texH;
+                            
+                            uvs.setXY(i, x2, y1);   // Top Right
+                            uvs.setXY(i+1, x1, y1); // Top Left
+                            uvs.setXY(i+2, x2, y2); // Bottom Right
+                            uvs.setXY(i+3, x1, y2); // Bottom Left
+                        };
+
+                        if (Array.isArray(cube.uv)) {
+                            const [u, v] = cube.uv;
+                            mapFace(0, u, v + d, d, h);                 // Right
+                            mapFace(1, u + d + w, v + d, d, h);         // Left
+                            mapFace(2, u + d, v, w, d);                 // Top
+                            mapFace(3, u + d + w, v, w, d);             // Bottom
+                            mapFace(5, u + d, v + d, w, h);             // Back (North)
+                            mapFace(4, u + d + w + d, v + d, w, h);     // Front (South)
+                        } else if (typeof cube.uv === 'object') {
+                            // Per-face UV mapping (Advanced)
+                            const mapSide = (faceIdx, uvDef) => {
+                                if(!uvDef || !uvDef.uv || !uvDef.uv_size) return;
+                                mapFace(faceIdx, uvDef.uv[0], uvDef.uv[1], uvDef.uv_size[0], uvDef.uv_size[1]);
+                            };
+                            mapSide(0, cube.uv.east);
+                            mapSide(1, cube.uv.west);
+                            mapSide(2, cube.uv.up);
+                            mapSide(3, cube.uv.down);
+                            mapSide(5, cube.uv.north);
+                            mapSide(4, cube.uv.south);
+                        }
+
+                        const mesh = new THREE.Mesh(geometry, this.material);
+                        let localX = x + w/2;
+                        let localY = y + h/2;
+                        let localZ = z + d/2;
+
+                        if (bone.pivot) {
+                            localX -= bone.pivot[0];
+                            localY -= bone.pivot[1];
+                            localZ -= bone.pivot[2];
+                        }
+
+                        mesh.position.set(localX, localY, localZ);
+                        group.add(mesh);
+                        
+                        // World bounds calculation
+                        const worldMesh = mesh.clone();
+                        worldMesh.position.set(x + w/2, y + h/2, z + d/2);
+                        bounds.expandByObject(worldMesh);
+                    });
+                    this.modelGroup.add(group);
+                });
+
+                // Auto-Center
+                const center = new THREE.Vector3();
+                bounds.getCenter(center);
+                this.modelGroup.position.sub(center);
+                this.scene.add(this.modelGroup);
+                
+                // Adjust camera distance
+                const size = new THREE.Vector3();
+                bounds.getSize(size);
+                const maxDim = Math.max(size.x, size.y, size.z) || 10;
+                this.camera.position.set(maxDim*1.5, maxDim*1.5, maxDim*1.5);
+                this.controls.target.set(0,0,0);
+                this.controls.update();
+            },
+
+            updateTexture(canvas) {
+                if(this.material && this.material.map) {
+                    this.material.map.image = canvas;
+                    this.material.map.needsUpdate = true;
+                }
+            },
+
+            resize(w, h) {
+                if(!this.camera || !this.renderer) return;
+                this.camera.aspect = w / h;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(w, h);
+            },
+
+            toggleAutoRotate() {
+                this.controls.autoRotate = !this.controls.autoRotate;
+            },
+
+            resetCamera() {
+                this.controls.reset();
+                this.controls.autoRotate = false;
+            },
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                if(this.controls) this.controls.update();
+                if(this.renderer && this.scene) this.renderer.render(this.scene, this.camera);
             }
         };
 
@@ -498,7 +671,9 @@
                     { type:'stone', palette:['#000000','#1a1a1a','#333333','#4d4d4d','#666666','#808080'], scale:0.8, chaos:0.5, noise:0.5, contrast:0.5, sat:1, opacity:50 }
                 ],
                 activeLayer: 0,
-                view: { x: 0, y: 0, scale: 1, dragging: false, lx: 0, ly: 0 }
+                view: { x: 0, y: 0, scale: 1, dragging: false, lx: 0, ly: 0 },
+                viewMode: '2d', // '2d' or '3d'
+                sidebarOpen: false
             },
             els: {},
 
@@ -506,7 +681,7 @@
                 const ids = ['fileInput','fileName','step2','step3','canvasWrapper','mainCanvas','viewportMsg',
                              'loader','loaderText','resSelect','presetSelector','paletteBox','manualColorPicker',
                              'searchQuery','refImg','noiseLevel','contrastLevel','scaleLevel','chaosLevel','satLevel','opacityLevel','opacityControl',
-                             'wireframeToggle','toast-container','searchModal','resultsList'];
+                             'wireframeToggle','toast-container','searchModal','resultsList','sidebar','sidebarOverlay','view-2d','view-3d','btn-2d','btn-3d','three-container'];
                 ids.forEach(id => this.els[id] = document.getElementById(id));
 
                 this.ctx = this.els.mainCanvas.getContext('2d');
@@ -521,7 +696,45 @@
                         if(this.state.texture) this.synthesize(true);
                     }
                 });
-                window.addEventListener('resize', () => { if(this.state.texture) this.fitView(); });
+                
+                window.addEventListener('resize', () => { 
+                    if(this.state.texture) this.fitView();
+                    if(this.state.viewMode === '3d') Viewer3D.resize(this.els['view-3d'].clientWidth, this.els['view-3d'].clientHeight);
+                });
+            },
+
+            // --- UI LOGIC ---
+            toggleSidebar() {
+                this.state.sidebarOpen = !this.state.sidebarOpen;
+                const sb = this.els.sidebar;
+                const ol = this.els.sidebarOverlay;
+                
+                if(this.state.sidebarOpen) {
+                    sb.classList.remove('sidebar-closed');
+                    ol.classList.remove('hidden');
+                } else {
+                    sb.classList.add('sidebar-closed');
+                    ol.classList.add('hidden');
+                }
+            },
+
+            setViewMode(mode) {
+                this.state.viewMode = mode;
+                if(mode === '2d') {
+                    this.els['view-2d'].classList.remove('hidden');
+                    this.els['view-3d'].classList.add('hidden');
+                    this.els['btn-2d'].className = "px-3 py-1 text-xs font-bold rounded-full bg-green-600 text-white transition-all";
+                    this.els['btn-3d'].className = "px-3 py-1 text-xs font-bold rounded-full text-gray-400 hover:text-white transition-all";
+                } else {
+                    this.els['view-2d'].classList.add('hidden');
+                    this.els['view-3d'].classList.remove('hidden');
+                    this.els['btn-2d'].className = "px-3 py-1 text-xs font-bold rounded-full text-gray-400 hover:text-white transition-all";
+                    this.els['btn-3d'].className = "px-3 py-1 text-xs font-bold rounded-full bg-blue-600 text-white transition-all";
+                    
+                    Viewer3D.init(this.els['three-container']);
+                    Viewer3D.resize(this.els['view-3d'].clientWidth, this.els['view-3d'].clientHeight);
+                    if(this.state.model && this.state.texture) Viewer3D.updateTexture(this.els.mainCanvas);
+                }
             },
 
             initPresets() {
@@ -577,7 +790,7 @@
                 const p = PRESETS[cat][name];
                 const l = this.state.layers[this.state.activeLayer];
                 l.type = p.type; l.scale = p.scale; l.chaos = p.chaos; l.noise = p.noise; l.contrast = p.contrast; l.sat = p.sat;
-                this.setLayer(this.state.activeLayer); // Refresh UI
+                this.setLayer(this.state.activeLayer); 
                 if(this.state.texture) this.synthesize(true);
                 this.notify(`Applied: ${name}`, "success");
             },
@@ -616,8 +829,8 @@
                                     const faces = [{ x: u+d, y: v+d, w: w, h: h }, { x: u+d+w+d, y: v+d, w: w, h: h }, { x: u, y: v+d, w: d, h: h }, { x: u+d+w, y: v+d, w: d, h: h }, { x: u+d, y: v, w: w, h: d }, { x: u+d+w, y: v, w: w, h: d }];
                                     faces.forEach(f => {
                                         const rx=Math.floor(f.x*scaleX), ry=Math.floor(f.y*scaleY), rw=Math.ceil(f.w*scaleX), rh=Math.ceil(f.h*scaleY);
-                                        TextureEngine.render(ctx, rx, ry, rw, rh, this.state.layers[0], false); // Base
-                                        if(this.state.layers[1].opacity > 0) TextureEngine.render(ctx, rx, ry, rw, rh, this.state.layers[1], true); // Overlay
+                                        TextureEngine.render(ctx, rx, ry, rw, rh, this.state.layers[0], false); 
+                                        if(this.state.layers[1].opacity > 0) TextureEngine.render(ctx, rx, ry, rw, rh, this.state.layers[1], true);
                                     });
                                 } else if (typeof cube.uv === 'object') {
                                     Object.values(cube.uv).forEach(d => {
@@ -635,16 +848,26 @@
                         img.onload = () => {
                             this.state.texture = img;
                             this.renderPreview();
+                            
+                            if(this.state.viewMode === '3d' && Viewer3D.isInit) {
+                                Viewer3D.updateTexture(cvs);
+                            }
+
                             if(!silent) {
                                 this.fitView();
                                 this.setLoading(false);
                                 this.els.step3.classList.remove('step-locked');
                                 this.els.step3.classList.add('step-active');
                                 this.notify("Texture Composite Generated", "success");
+                                
+                                if(this.els['three-container'].innerHTML === '') Viewer3D.init(this.els['three-container']);
+                                Viewer3D.loadGeometry(this.state.model, cvs, size);
+                            } else {
+                                if(Viewer3D.isInit) Viewer3D.updateTexture(cvs);
                             }
                         };
                         img.src = cvs.toDataURL();
-                    } catch(e) { this.setLoading(false); this.notify(e.message, "error"); }
+                    } catch(e) { console.error(e); this.setLoading(false); this.notify(e.message, "error"); }
                 });
             },
 
@@ -725,15 +948,13 @@
                         document.getElementById('modelStatus').className = "text-[10px] text-green-400 bg-green-900 px-1.5 py-0.5 rounded border border-green-700";
                         this.els.step2.classList.remove('step-locked');
                         this.els.step2.classList.add('step-active');
-                        this.els.viewportMsg.style.display = 'none'; // FIX: Hides overlay
+                        this.els.viewportMsg.style.display = 'none';
                         this.synthesize();
                     } catch(e) { this.notify("Invalid JSON", "error"); }
                 };
                 r.readAsText(f);
             },
 
-            // ... [Keep renderPreview, fitView, export, setupCanvasEvents exactly as before] ...
-            
             renderPreview() { 
                 const cvs = this.els.mainCanvas; if(!this.state.texture) return;
                 cvs.width = this.state.res; cvs.height = this.state.res;
@@ -749,7 +970,10 @@
                 }
                 cvs.style.transform = `translate(${this.state.view.x}px, ${this.state.view.y}px) scale(${this.state.view.scale})`;
             },
-            fitView() { const w=this.els.canvasWrapper; const sc=(Math.min(w.clientWidth,w.clientHeight)-40)/this.state.res; this.state.view={x:0,y:0,scale:sc,dragging:false}; this.renderPreview(); },
+            fitView() { 
+                const w=this.els.canvasWrapper; const sc=(Math.min(w.clientWidth,w.clientHeight)-40)/this.state.res; this.state.view={x:0,y:0,scale:sc,dragging:false}; this.renderPreview(); 
+                if(this.state.viewMode === '3d') Viewer3D.resize(this.els['view-3d'].clientWidth, this.els['view-3d'].clientHeight);
+            },
             export() { 
                 if(!this.state.texture) return;
                 const a=document.createElement('a'); a.download=`texture_${Date.now()}.png`; a.href=this.state.texture.src; a.click();
