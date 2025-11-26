@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Texture DNA Lab | Advanced</title>
+    <title>Texture DNA Lab | Dual Layer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Base Styles */
@@ -39,25 +39,29 @@
         .step-locked { opacity: 0.5; pointer-events: none; filter: grayscale(1); }
         .step-active { opacity: 1; pointer-events: auto; filter: grayscale(0); }
 
-        /* Mobile specific adjustments */
-        @media (max-width: 768px) {
-            body { overflow: auto; }
-            .main-layout { flex-direction: column; height: auto; overflow: visible; }
-            .sidebar { width: 100%; height: auto; overflow: visible; border-right: none; border-bottom: 1px solid #1f2937; }
-            .canvas-area { height: 400px; width: 100%; }
-        }
+        /* Layer Tabs */
+        .layer-tab { transition: all 0.2s; border-bottom: 2px solid transparent; opacity: 0.6; }
+        .layer-tab.active { opacity: 1; border-color: #10b981; color: #10b981; }
 
         /* Search Result Modal */
         .search-item:hover { background-color: #1f2937; border-color: #10b981; }
         .mini-swatch { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); }
+        
+        input[type=range] { -webkit-appearance: none; background: transparent; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 12px; width: 12px; border-radius: 50%; background: #10b981; cursor: pointer; margin-top: -4px; box-shadow: 0 0 5px rgba(16,185,129,0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; cursor: pointer; background: #374151; border-radius: 2px;
+        }
+        
+        optgroup { color: #10b981; font-weight: bold; background: #111827; }
+        option { color: #e2e8f0; background: #1f2937; padding: 4px; }
     </style>
 </head>
 <body class="h-screen flex flex-col text-sm">
 
-    <!-- Toast Notifications -->
     <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-max max-w-[90vw] pointer-events-none"></div>
-
-    <!-- Hidden Inputs -->
     <input type="file" id="fileInput" accept=".json,.txt" class="hidden" onchange="app.handleFileSelect(event)">
     <input type="color" id="manualColorPicker" class="opacity-0 absolute -z-10">
     <img id="refImg" class="hidden" crossorigin="anonymous">
@@ -66,22 +70,13 @@
     <div id="searchModal" class="fixed inset-0 bg-black/80 z-40 hidden flex items-center justify-center p-4 backdrop-blur-sm">
         <div class="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl w-full max-w-md flex flex-col max-h-[80vh]">
             <div class="p-4 border-b border-gray-800 flex justify-between items-center">
-                <div>
-                    <h3 class="font-bold text-green-400">Texture Library</h3>
-                    <p class="text-[10px] text-gray-500" id="searchMeta">Searching...</p>
-                </div>
+                <div><h3 class="font-bold text-green-400">Texture Library</h3><p class="text-[10px] text-gray-500" id="searchMeta">Searching...</p></div>
                 <button onclick="document.getElementById('searchModal').classList.add('hidden')" class="text-gray-500 hover:text-white">✕</button>
             </div>
-            <div id="resultsList" class="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-                <!-- Results injected here -->
-            </div>
-            <div class="p-3 border-t border-gray-800 text-center">
-                <p class="text-[10px] text-gray-500">Live DNA extraction active</p>
-            </div>
+            <div id="resultsList" class="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar"></div>
         </div>
     </div>
 
-    <!-- Header -->
     <header class="h-12 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-4 shrink-0 z-20">
         <div class="flex items-center gap-2">
             <div class="w-6 h-6 bg-gradient-to-br from-green-500 to-blue-600 rounded flex items-center justify-center font-bold text-white text-xs">T</div>
@@ -99,13 +94,12 @@
         </div>
     </header>
 
-    <!-- Main Layout -->
     <div class="main-layout flex-1 flex h-full overflow-hidden">
         
-        <!-- SIDEBAR (Controls) -->
-        <div class="sidebar w-[320px] bg-gray-900 border-r border-gray-800 flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
+        <!-- SIDEBAR -->
+        <div class="sidebar w-[340px] bg-gray-900 border-r border-gray-800 flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
             
-            <!-- 1. Geometry Section -->
+            <!-- 1. Geometry -->
             <div class="p-4 border-b border-gray-800">
                 <div class="flex justify-between items-center mb-2">
                     <label class="font-bold text-blue-400 text-xs uppercase">1. Geometry</label>
@@ -117,62 +111,89 @@
                 </div>
             </div>
 
-            <!-- 2. Synthesis Section -->
+            <!-- 2. Synthesis -->
             <div id="step2" class="p-4 border-b border-gray-800 step-locked flex-1">
-                <div class="flex justify-between items-center mb-3">
-                    <label class="font-bold text-green-400 text-xs uppercase">2. Texture Engine</label>
+                <div class="flex justify-between items-center mb-2">
+                    <label class="font-bold text-green-400 text-xs uppercase">2. Synthesizer</label>
+                    <button onclick="app.randomizeParams()" class="text-xs text-gray-500 hover:text-green-400" title="Randomize Current Layer">🎲 Remix Layer</button>
                 </div>
 
-                <!-- Reference Search -->
-                <div class="space-y-2 mb-4">
-                    <label class="text-[10px] text-gray-500 uppercase">DNA Source</label>
-                    <div class="flex gap-1">
-                        <input id="searchQuery" type="text" placeholder="Search (e.g. 'oak', 'stone')" 
-                               class="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-white focus:border-green-500 focus:outline-none"
-                               onkeypress="if(event.key==='Enter') app.searchReference()">
-                        <button onclick="app.searchReference()" class="bg-gray-700 hover:bg-gray-600 text-white px-2.5 rounded text-xs">🔍</button>
-                    </div>
+                <!-- Layer Switcher -->
+                <div class="flex border-b border-gray-700 mb-4">
+                    <button onclick="app.setLayer(0)" id="tab-0" class="layer-tab active flex-1 py-2 text-xs font-bold text-center hover:bg-gray-800">Background</button>
+                    <button onclick="app.setLayer(1)" id="tab-1" class="layer-tab flex-1 py-2 text-xs font-bold text-center hover:bg-gray-800">Foreground</button>
                 </div>
 
                 <!-- Engine Controls -->
-                <div class="bg-black/20 rounded border border-gray-700 p-3 mb-4 space-y-3">
+                <div class="bg-black/20 rounded border border-gray-700 p-3 mb-4 space-y-3 relative">
                     
-                    <!-- Structure Type -->
-                    <div class="flex justify-between items-center">
-                        <span class="text-[10px] text-gray-400 uppercase">Structure</span>
-                        <select id="patternType" onchange="app.setPattern(this.value, true)" class="bg-gray-800 border border-gray-600 text-[10px] text-green-400 rounded px-1 cursor-pointer w-24">
-                            <option value="wood">Fibers (Wood)</option>
-                            <option value="bricks">Grid (Bricks)</option>
-                            <option value="stone">Noise (Stone)</option>
-                            <option value="metal">Smooth (Metal)</option>
-                            <option value="scales">Cells (Scales)</option>
+                    <!-- Preset Selector -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-[10px] text-gray-400 uppercase">Layer Preset</span>
+                        </div>
+                        <select id="presetSelector" onchange="app.applyPreset(this.value)" class="w-full bg-gray-800 border border-gray-600 text-xs text-white rounded px-2 py-1.5 cursor-pointer focus:border-green-500 focus:outline-none">
+                            <option value="" disabled selected>Choose Material...</option>
                         </select>
                     </div>
 
-                    <!-- Palette -->
+                    <!-- Palette & DNA -->
                     <div>
                         <div class="flex justify-between text-[10px] text-gray-400 mb-1">
                             <span>Palette</span>
-                            <span id="paletteSource" class="text-gray-600">Default</span>
+                            <button onclick="app.searchReference()" class="text-[10px] text-blue-400 hover:text-blue-300">🔍 Search Ref</button>
                         </div>
                         <div class="grid grid-cols-6 gap-0.5 h-6 rounded overflow-hidden border border-gray-700" id="paletteBox"></div>
                     </div>
 
+                    <!-- Search Source -->
+                    <div class="mb-2">
+                        <div class="flex gap-1">
+                            <input id="searchQuery" type="text" placeholder="Ref Search (e.g. 'oak', 'stone')" 
+                                   class="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-white focus:border-green-500 focus:outline-none"
+                                   onkeypress="if(event.key==='Enter') app.searchReference()">
+                            <button onclick="app.searchReference()" class="bg-gray-700 hover:bg-gray-600 text-white px-2.5 rounded text-xs">🔍</button>
+                        </div>
+                    </div>
+
                     <!-- Sliders -->
-                    <div class="space-y-2 pt-2 border-t border-gray-700/50">
-                        <div class="flex items-center justify-between">
-                            <span class="text-[10px] text-gray-400">Roughness</span>
-                            <input type="range" id="noiseLevel" min="0" max="100" value="30" class="w-20 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
+                    <div class="space-y-3 pt-2 border-t border-gray-700/50">
+                        
+                        <div class="grid grid-cols-2 gap-x-4 gap-y-2">
+                            <div>
+                                <div class="flex justify-between mb-1"><span class="text-[10px] text-gray-400">Scale</span><span id="val-scale" class="text-[9px] text-green-400">50</span></div>
+                                <input type="range" id="scaleLevel" min="1" max="100" value="50" class="w-full h-1" oninput="app.updateUIVal('scale', this.value)">
+                            </div>
+                            <div>
+                                <div class="flex justify-between mb-1"><span class="text-[10px] text-gray-400">Chaos</span><span id="val-chaos" class="text-[9px] text-green-400">20</span></div>
+                                <input type="range" id="chaosLevel" min="0" max="100" value="20" class="w-full h-1" oninput="app.updateUIVal('chaos', this.value)">
+                            </div>
+                            <div>
+                                <div class="flex justify-between mb-1"><span class="text-[10px] text-gray-400">Roughness</span><span id="val-noise" class="text-[9px] text-green-400">30</span></div>
+                                <input type="range" id="noiseLevel" min="0" max="100" value="30" class="w-full h-1" oninput="app.updateUIVal('noise', this.value)">
+                            </div>
+                            <div>
+                                <div class="flex justify-between mb-1"><span class="text-[10px] text-gray-400">Contrast</span><span id="val-contrast" class="text-[9px] text-green-400">50</span></div>
+                                <input type="range" id="contrastLevel" min="0" max="100" value="50" class="w-full h-1" oninput="app.updateUIVal('contrast', this.value)">
+                            </div>
                         </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-[10px] text-gray-400">Contrast</span>
-                            <input type="range" id="contrastLevel" min="0" max="100" value="50" class="w-20 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
+
+                        <div>
+                            <div class="flex justify-between mb-1"><span class="text-[10px] text-gray-400">Saturation</span><span id="val-sat" class="text-[9px] text-blue-400">100%</span></div>
+                            <input type="range" id="satLevel" min="0" max="200" value="100" class="w-full h-1 accent-blue-500" oninput="app.updateUIVal('sat', this.value)">
                         </div>
+
+                        <!-- FOREGROUND ONLY: Opacity -->
+                        <div id="opacityControl" class="hidden border-t border-gray-700 pt-2">
+                            <div class="flex justify-between mb-1"><span class="text-[10px] text-yellow-400 font-bold">Layer Opacity</span><span id="val-opacity" class="text-[9px] text-yellow-400">50%</span></div>
+                            <input type="range" id="opacityLevel" min="0" max="100" value="50" class="w-full h-1 accent-yellow-500" oninput="app.updateUIVal('opacity', this.value)">
+                        </div>
+
                     </div>
                 </div>
 
-                <button onclick="app.synthesize()" class="w-full py-2.5 bg-green-600 hover:bg-green-500 text-white font-bold text-xs rounded shadow-lg shadow-green-900/20 transition-all">
-                    Generate Texture
+                <button onclick="app.synthesize()" class="w-full py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-bold text-xs rounded shadow-lg shadow-green-900/20 transition-all flex items-center justify-center gap-2">
+                    <span>Generate Composite</span>
                 </button>
                 
                 <div class="mt-2 text-center">
@@ -195,20 +216,14 @@
             <div id="canvasWrapper" class="absolute inset-0 checkerboard flex items-center justify-center cursor-grab touch-none">
                 <canvas id="mainCanvas" class="shadow-2xl"></canvas>
             </div>
-            
-            <!-- Instructions Overlay -->
             <div id="viewportMsg" class="absolute inset-0 flex flex-col items-center justify-center text-gray-600 pointer-events-none z-10 bg-black/50 backdrop-blur-sm transition-opacity duration-300">
                 <p class="text-sm font-medium text-gray-300">Workspace Empty</p>
                 <p class="text-xs mt-1 opacity-60">Upload .geo.json to begin</p>
             </div>
-
-            <!-- Loader -->
             <div id="loader" class="absolute inset-0 bg-black/80 z-50 hidden flex-col items-center justify-center backdrop-blur-sm">
                 <div class="loader mb-2"></div>
                 <p id="loaderText" class="text-green-400 text-[10px] font-mono uppercase animate-pulse">Processing...</p>
             </div>
-
-            <!-- View Controls -->
             <div class="absolute bottom-4 right-4 flex gap-2 z-20">
                 <button onclick="app.fitView()" class="bg-gray-800/80 hover:bg-gray-700 text-white p-2 rounded backdrop-blur border border-gray-600 shadow-lg" title="Reset View">
                     <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
@@ -218,203 +233,256 @@
     </div>
 
     <script>
-        /**
-         * Texture DNA - Advanced Procedural Generation Engine
-         */
+        const PRESETS = {
+            "Woods": { "Oak Planks":{type:"wood",scale:0.5,chaos:0.1,noise:0.2,contrast:0.5,sat:1.0}, "Spruce":{type:"wood",scale:0.6,chaos:0.05,noise:0.15,contrast:0.4,sat:0.9}, "Birch":{type:"wood",scale:0.5,chaos:0.05,noise:0.1,contrast:0.3,sat:0.95}, "Jungle":{type:"wood",scale:0.4,chaos:0.2,noise:0.4,contrast:0.6,sat:1.1}, "Dark Oak":{type:"wood",scale:0.6,chaos:0.05,noise:0.15,contrast:0.6,sat:0.9}, "Rotting":{type:"wood",scale:0.5,chaos:0.6,noise:0.8,contrast:0.7,sat:0.7} },
+            "Stones": { "Cobble":{type:"stone",scale:0.4,chaos:0.6,noise:0.5,contrast:0.7,sat:0.8}, "Smooth":{type:"stone",scale:0.2,chaos:0.1,noise:0.2,contrast:0.3,sat:0.9}, "Granite":{type:"stone",scale:0.7,chaos:0.8,noise:0.6,contrast:0.6,sat:1.1}, "Bedrock":{type:"stone",scale:0.8,chaos:0.9,noise:0.9,contrast:1.0,sat:0.8} },
+            "Construction": { "Bricks":{type:"bricks",scale:0.5,chaos:0.1,noise:0.3,contrast:0.6,sat:1.1}, "Stone Brick":{type:"bricks",scale:0.4,chaos:0.05,noise:0.2,contrast:0.5,sat:0.9}, "Tiles":{type:"bricks",scale:0.8,chaos:0.0,noise:0.1,contrast:0.5,sat:1.0}, "Ruined":{type:"bricks",scale:0.5,chaos:0.7,noise:0.9,contrast:0.7,sat:0.7} },
+            "Metals": { "Iron":{type:"metal",scale:0.3,chaos:0.1,noise:0.2,contrast:0.4,sat:0.8}, "Gold":{type:"metal",scale:0.3,chaos:0.1,noise:0.15,contrast:0.6,sat:1.2}, "Rust":{type:"metal",scale:0.6,chaos:0.7,noise:0.8,contrast:0.8,sat:1.1}, "Chrome":{type:"metal",scale:0.1,chaos:0.0,noise:0.05,contrast:0.9,sat:0.0} },
+            "Organics": { "Scales":{type:"scales",scale:0.4,chaos:0.1,noise:0.3,contrast:0.7,sat:1.0}, "Alien":{type:"scales",scale:0.5,chaos:0.6,noise:0.5,contrast:0.4,sat:1.3}, "Dirt":{type:"stone",scale:1.0,chaos:0.8,noise:0.8,contrast:0.3,sat:0.9} },
+            "Fabrics": { "Wool":{type:"weave",scale:0.8,chaos:0.1,noise:0.4,contrast:0.3,sat:1.0}, "Kevlar":{type:"weave",scale:0.65,chaos:0.05,noise:0.2,contrast:0.6,sat:1.0}, "Carbon":{type:"weave",scale:0.6,chaos:0.0,noise:0.1,contrast:0.8,sat:0.5} }
+        };
+
         const TextureEngine = {
-            
-            // ANALYZE IMAGE DNA
+            adjustSat(r, g, b, sat) {
+                const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+                const s = sat;
+                return [Math.min(255,Math.max(0,gray+(r-gray)*s)), Math.min(255,Math.max(0,gray+(g-gray)*s)), Math.min(255,Math.max(0,gray+(b-gray)*s))];
+            },
+            parseColor(hexOrRgb) {
+                if(hexOrRgb.startsWith('#')) return [(parseInt(hexOrRgb.slice(1),16)>>16)&255, (parseInt(hexOrRgb.slice(1),16)>>8)&255, parseInt(hexOrRgb.slice(1),16)&255];
+                return hexOrRgb.match(/\d+/g).map(Number);
+            },
             analyze(imgElement) {
-                // Use a small canvas for fast analysis
-                const cvs = document.createElement('canvas'); 
-                cvs.width = 64; cvs.height = 64;
-                const ctx = cvs.getContext('2d'); 
-                ctx.drawImage(imgElement, 0, 0, 64, 64);
-                const data = ctx.getImageData(0, 0, 64, 64).data;
-                
-                const colors = {};
-                let edges = 0;
-                
-                for(let i=0; i<data.length; i+=4) {
-                    if(data[i+3]<128) continue; // Skip transparency
-                    const r=data[i], g=data[i+1], b=data[i+2];
-                    const k = `${Math.round(r/10)*10},${Math.round(g/10)*10},${Math.round(b/10)*10}`;
-                    colors[k] = (colors[k]||0)+1;
-
-                    if(i < data.length-4) {
-                        const lum1 = (r+g+b)/3;
-                        const lum2 = (data[i+4]+data[i+5]+data[i+6])/3;
-                        if(Math.abs(lum1-lum2) > 20) edges++;
-                    }
+                const cvs = document.createElement('canvas'); cvs.width=64; cvs.height=64;
+                const ctx = cvs.getContext('2d'); ctx.drawImage(imgElement,0,0,64,64);
+                const data = ctx.getImageData(0,0,64,64).data;
+                const colors = {}; let edges = 0;
+                for(let i=0;i<data.length;i+=4) {
+                    if(data[i+3]<128) continue;
+                    const k=`${Math.round(data[i]/10)*10},${Math.round(data[i+1]/10)*10},${Math.round(data[i+2]/10)*10}`;
+                    colors[k]=(colors[k]||0)+1;
+                    if(i<data.length-4) { const l1=(data[i]+data[i+1]+data[i+2])/3, l2=(data[i+4]+data[i+5]+data[i+6])/3; if(Math.abs(l1-l2)>20) edges++; }
                 }
-
-                const sorted = Object.keys(colors).sort((a,b) => colors[b]-colors[a]).slice(0,10);
-                sorted.sort((a,b) => {
-                     const [r1,g1,b1] = a.split(',').map(Number);
-                     const [r2,g2,b2] = b.split(',').map(Number);
-                     return (r1+g1+b1) - (r2+g2+b2);
-                });
-                
-                const palette = [];
-                for(let i=0; i<6; i++) {
-                    const c = sorted[Math.floor(i*(sorted.length/6))] || sorted[0];
-                    if(c) palette.push(`rgb(${c})`);
-                }
-
-                // Determine pattern
-                const edgeRatio = edges / (64*64);
-                let suggestedPattern = 'metal';
-                if(edgeRatio > 0.3) suggestedPattern = 'stone';
-                else if(edgeRatio > 0.1) suggestedPattern = 'wood';
-
-                return { palette, edgeRatio, suggestedPattern };
+                const sorted = Object.keys(colors).sort((a,b)=>colors[b]-colors[a]).slice(0,10).sort((a,b)=>{ const [r1,g1,b1]=a.split(',').map(Number), [r2,g2,b2]=b.split(',').map(Number); return (r1+g1+b1)-(r2+g2+b2);});
+                const palette = []; for(let i=0;i<6;i++) { const c=sorted[Math.floor(i*(sorted.length/6))]||sorted[0]; if(c) palette.push(`rgb(${c})`); }
+                return { palette, edgeRatio: edges/(64*64) };
             },
-
-            // Layered Generation System
-            render(ctx, x, y, w, h, config) {
-                ctx.save();
-                ctx.beginPath();
-                ctx.rect(x, y, w, h);
-                ctx.clip();
-                ctx.translate(x, y);
-
-                const { type, palette, noise, contrast } = config;
-                const p = palette; 
+            render(ctx, x, y, w, h, config, isOverlay) {
+                ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.translate(x, y);
+                const { type, palette, scale, chaos, noise, contrast, sat, opacity } = config;
+                const p = palette.map(c => { const [r,g,b]=this.parseColor(c); const [nr,ng,nb]=this.adjustSat(r,g,b,sat); return `rgb(${Math.floor(nr)},${Math.floor(ng)},${Math.floor(nb)})`; });
                 
-                // Base
-                const baseVar = (Math.random() - 0.5) * 0.05; 
-                ctx.fillStyle = p[2]; 
-                ctx.fillRect(0, 0, w, h);
+                if (isOverlay) ctx.globalAlpha = opacity / 100;
 
-                // Structure
-                ctx.save();
-                if (type === 'wood') this.layerFibers(ctx, w, h, p, contrast);
-                else if (type === 'bricks') this.layerGrid(ctx, w, h, p, contrast);
-                else if (type === 'scales') this.layerCells(ctx, w, h, p, contrast);
-                else if (type === 'metal') this.layerSmooth(ctx, w, h, p, contrast);
-                else this.layerNoise(ctx, w, h, p, contrast); 
-                ctx.restore();
+                // Base Fill
+                if (!isOverlay || (isOverlay && chaos < 0.5)) { 
+                    ctx.fillStyle = p[2]; ctx.fillRect(0, 0, w, h);
+                }
 
-                // Detail
-                this.layerGrain(ctx, w, h, noise);
-                this.layerGrunge(ctx, w, h, noise * 0.5);
+                // Generator Routing
+                if (type === 'wood') this.genWood(ctx, w, h, p, scale, chaos, contrast);
+                else if (type === 'bricks') this.genBricks(ctx, w, h, p, scale, chaos, contrast);
+                else if (type === 'scales') this.genCells(ctx, w, h, p, scale, chaos, contrast);
+                else if (type === 'metal') this.genMetal(ctx, w, h, p, scale, chaos, contrast);
+                else if (type === 'weave') this.genWeave(ctx, w, h, p, scale, chaos, contrast);
+                else this.genNoise(ctx, w, h, p, scale, chaos, contrast); 
+
+                // Finish
+                if (noise > 0.05) this.genGrain(ctx, w, h, noise);
+                if (chaos > 0.2) this.genGrunge(ctx, w, h, noise * 0.5 + chaos * 0.2);
 
                 ctx.restore();
             },
 
-            // --- Generators ---
+            // --- PRECISE GENERATORS ---
 
-            layerFibers(ctx, w, h, p, strength) {
+            genWood(ctx, w, h, p, scale, chaos, contrast) {
+                // Calculate orientation based on dimensions
                 const isHorz = w >= h;
-                const bands = isHorz ? Math.ceil(h/4) : Math.ceil(w/4);
-                const size = (isHorz ? h : w) / bands;
+                
+                // Scale determines plank count: 0.0-1.0 -> 2-8 planks
+                // Important: Integer plank count for clean lines
+                const plankCount = Math.max(2, Math.floor(2 + scale * 6)); 
+                const plankSize = (isHorz ? h : w) / plankCount;
 
-                for(let i=0; i<bands; i++) {
-                    const pos = i*size;
-                    ctx.fillStyle = (i%2===0) ? p[2] : p[3];
-                    isHorz ? ctx.fillRect(0, pos, w, size) : ctx.fillRect(pos, 0, size, h);
-                    ctx.fillStyle = p[1]; 
-                    ctx.globalAlpha = 0.1 + (strength * 0.2);
-                    const streaks = Math.floor(isHorz ? w/2 : h/2);
-                    for(let k=0; k<streaks; k++) {
-                        const len = Math.random() * (isHorz ? w/2 : h/2);
-                        const thick = Math.random() < 0.3 ? 2 : 1;
-                        if(isHorz) ctx.fillRect(Math.random()*w, pos + Math.random()*size, len, thick);
-                        else ctx.fillRect(pos + Math.random()*size, Math.random()*h, thick, len);
+                for (let i = 0; i < plankCount; i++) {
+                    const pos = i * plankSize;
+                    
+                    // Plank Base
+                    ctx.fillStyle = (i % 2 === 0) ? p[2] : p[3];
+                    if (isHorz) ctx.fillRect(0, pos, w, plankSize);
+                    else ctx.fillRect(pos, 0, plankSize, h);
+
+                    // Grain (Inside planks)
+                    ctx.fillStyle = p[1];
+                    ctx.globalAlpha = 0.1 + (contrast * 0.2);
+                    const grainDensity = Math.floor(plankSize * 0.5); // Lines per plank
+                    
+                    for (let g = 0; g < grainDensity; g++) {
+                        const gPos = pos + (Math.random() * plankSize);
+                        const len = (isHorz ? w : h) * (0.2 + Math.random() * 0.8); // Length of grain line
+                        const start = Math.random() * ((isHorz ? w : h) - len);
+                        
+                        // Chaos adds slight wiggle to grain
+                        const wiggle = (Math.random() - 0.5) * (chaos * 4);
+
+                        if (isHorz) ctx.fillRect(start, gPos + wiggle, len, 1);
+                        else ctx.fillRect(gPos + wiggle, start, 1, len);
                     }
-                    ctx.globalAlpha = 0.6;
-                    ctx.fillStyle = p[0];
-                    if(i>0) isHorz ? ctx.fillRect(0, pos, w, 1) : ctx.fillRect(pos, 0, 1, h);
                     ctx.globalAlpha = 1.0;
+
+                    // Separator Line (Dark, crisp)
+                    if (i > 0) {
+                        ctx.fillStyle = p[0];
+                        ctx.globalAlpha = 0.6 + (contrast * 0.4);
+                        if (isHorz) ctx.fillRect(0, pos, w, 1); // Horizontal line
+                        else ctx.fillRect(pos, 0, 1, h); // Vertical line
+                        ctx.globalAlpha = 1.0;
+                    }
                 }
             },
 
-            layerGrid(ctx, w, h, p, strength) {
-                ctx.fillStyle = p[0]; ctx.fillRect(0,0,w,h);
-                const rows = 3; const cols = 2;
-                const bh = h/rows; const bw = w/cols;
-                const gap = Math.max(1, w/64);
+            genBricks(ctx, w, h, p, scale, chaos, contrast) {
+                ctx.fillStyle = p[0]; ctx.fillRect(0,0,w,h); // Mortar base
+                
+                const rows = Math.max(2, Math.floor(2 + scale * 8));
+                const cols = Math.max(2, Math.floor(2 + scale * 4));
+                const bH = h / rows;
+                const bW = w / cols;
+                const gap = Math.max(1, Math.floor(Math.min(w,h) * 0.02)); // 2% gap minimum 1px
 
-                for(let r=0; r<=rows; r++) {
-                    const off = (r%2) * (-bw/2);
-                    for(let c=0; c<=cols+1; c++) {
+                for (let r = 0; r < rows; r++) {
+                    const offset = (r % 2) * (bW / 2);
+                    // Draw extra column to cover offset wrap
+                    for (let c = -1; c <= cols; c++) {
+                        // Chaos: Randomly skip brick (ruined look)
+                        if (chaos > 0.5 && Math.random() < (chaos - 0.5) * 0.2) continue;
+
+                        // Color variety
                         const rnd = Math.random();
-                        if(rnd > 0.9) ctx.fillStyle = p[4]; 
-                        else if(rnd > 0.4) ctx.fillStyle = p[3]; 
-                        else ctx.fillStyle = p[2]; 
-                        ctx.fillRect(c*bw + off + gap, r*bh + gap, bw-gap*2, bh-gap*2);
+                        if (rnd > 0.9 - (contrast * 0.2)) ctx.fillStyle = p[4];
+                        else if (rnd > 0.4) ctx.fillStyle = p[3];
+                        else ctx.fillStyle = p[2];
+
+                        // Chaos: Offset jitter (Horizontal only for structural integrity)
+                        const jx = (Math.random() - 0.5) * (chaos * gap * 2);
+                        
+                        ctx.fillRect(
+                            (c * bW) + offset + gap + jx, 
+                            (r * bH) + gap, 
+                            Math.max(1, bW - gap*2), 
+                            Math.max(1, bH - gap*2)
+                        );
                     }
                 }
             },
 
-            layerCells(ctx, w, h, p, strength) {
-                if (w < 1 || h < 1) return;
-                const scale = Math.max(2, Math.min(w,h)/4);
-                const radius = Math.max(0.1, scale/2 - 1); 
-                for(let y=0; y<h; y+=scale) {
-                    for(let x=0; x<w; x+=scale) {
-                        ctx.fillStyle = (Math.random()>0.5) ? p[3] : p[2];
-                        ctx.beginPath();
-                        ctx.arc(x + scale/2, y + scale/2, radius, 0, Math.PI*2);
-                        ctx.fill();
+            genWeave(ctx, w, h, p, scale, chaos, contrast) {
+                // Thread size depends on scale (smaller scale = bigger threads)
+                const thread = Math.max(2, Math.floor(12 - (scale * 10)));
+                const cols = Math.ceil(w / thread);
+                const rows = Math.ceil(h / thread);
+
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        const isVert = (r + c) % 2 === 0;
+                        
+                        // Base thread color
+                        ctx.fillStyle = isVert ? p[2] : p[3];
+                        // Occasional highlight thread
+                        if (Math.random() > 0.95) ctx.fillStyle = p[4];
+
+                        ctx.fillRect(c*thread, r*thread, thread, thread);
+
+                        // Shading for depth (The "Weave" look)
+                        ctx.fillStyle = '#000';
+                        ctx.globalAlpha = 0.3 * contrast;
+                        if (isVert) {
+                            ctx.fillRect(c*thread, r*thread, 1, thread); // Left shadow
+                            ctx.fillRect((c+1)*thread - 1, r*thread, 1, thread); // Right shadow
+                        } else {
+                            ctx.fillRect(c*thread, r*thread, thread, 1); // Top shadow
+                            ctx.fillRect(c*thread, (r+1)*thread - 1, thread, 1); // Bottom shadow
+                        }
+                        ctx.globalAlpha = 1.0;
                     }
                 }
             },
 
-            layerSmooth(ctx, w, h, p, strength) {
-                const grad = ctx.createLinearGradient(0,0,w,h);
-                grad.addColorStop(0, p[2]);
-                grad.addColorStop(1, p[4]);
-                ctx.fillStyle = grad;
-                ctx.fillRect(0,0,w,h);
-                ctx.strokeStyle = p[5];
-                ctx.globalAlpha = 0.2 * strength;
+            genCells(ctx, w, h, p, scale, chaos, contrast) {
+                const cellS = Math.max(4, Math.floor(32 - (scale * 24))); // 4px to 32px
+                
+                for (let y = 0; y < h; y += cellS) {
+                    for (let x = 0; x < w; x += cellS) {
+                        ctx.fillStyle = (Math.random() > 0.5) ? p[3] : p[2];
+                        
+                        // Chaos: Jitter position
+                        const jx = (Math.random()-0.5) * (chaos * cellS);
+                        const jy = (Math.random()-0.5) * (chaos * cellS);
+                        
+                        // Draw Square Cell (Not circle)
+                        const size = Math.max(2, cellS - 1);
+                        ctx.fillRect(x + jx, y + jy, size, size);
+
+                        // Highlight center
+                        if (contrast > 0.5) {
+                            ctx.fillStyle = p[4];
+                            ctx.globalAlpha = 0.3;
+                            ctx.fillRect(x + jx + size/4, y + jy + size/4, size/2, size/2);
+                            ctx.globalAlpha = 1.0;
+                        }
+                    }
+                }
+            },
+
+            genMetal(ctx, w, h, p, scale, chaos, contrast) {
+                const grad = ctx.createLinearGradient(0,0,w,h); 
+                grad.addColorStop(0,p[2]); grad.addColorStop(1,p[4]); 
+                ctx.fillStyle=grad; ctx.fillRect(0,0,w,h);
+                
+                // Scratches
+                ctx.strokeStyle=p[5]; 
+                ctx.globalAlpha=0.2 * contrast;
+                const count = 5 + (chaos * 20);
+                
                 ctx.beginPath();
-                for(let i=0; i<5; i++) {
-                    ctx.moveTo(Math.random()*w, Math.random()*h);
-                    ctx.lineTo(Math.random()*w, Math.random()*h);
+                for(let i=0; i<count; i++) {
+                    const sx=Math.random()*w, sy=Math.random()*h;
+                    const len=(w*0.2) * (1 + Math.random()); // Length based on scale/size
+                    ctx.moveTo(sx,sy); ctx.lineTo(sx+len, sy+len);
                 }
                 ctx.stroke();
-                ctx.globalAlpha = 1.0;
+                ctx.globalAlpha=1.0;
             },
 
-            layerNoise(ctx, w, h, p, strength) {
-                const spots = (w*h) / 10;
-                for(let i=0; i<spots; i++) {
-                    ctx.fillStyle = (Math.random()>0.5) ? p[1] : p[3];
-                    ctx.globalAlpha = 0.3 * strength;
-                    const r = Math.random() * (Math.min(w,h)/4);
-                    if(r > 0) {
-                        ctx.beginPath();
-                        ctx.arc(Math.random()*w, Math.random()*h, r, 0, Math.PI*2);
-                        ctx.fill();
-                    }
-                }
-                ctx.globalAlpha = 1.0;
-            },
-
-            layerGrain(ctx, w, h, amount) {
-                ctx.fillStyle = '#000';
-                ctx.globalAlpha = amount * 0.15;
-                const count = w * h * 0.4;
+            genNoise(ctx, w, h, p, scale, chaos, contrast) {
+                // Blocky Noise
+                const count = (w*h) * 0.1 * scale;
                 for(let i=0; i<count; i++) {
-                    ctx.fillRect(Math.random()*w, Math.random()*h, 1, 1);
+                    ctx.fillStyle = (Math.random()>0.5) ? p[1] : p[3];
+                    ctx.globalAlpha = 0.3 * contrast;
+                    const s = 1 + Math.random() * (scale * 4);
+                    ctx.fillRect(Math.random()*w, Math.random()*h, s, s);
                 }
+                ctx.globalAlpha=1.0;
+            },
+
+            genGrain(ctx, w, h, amt) {
+                ctx.fillStyle = '#000';
+                ctx.globalAlpha = amt * 0.15;
+                const count = w*h*0.5;
+                for(let i=0; i<count; i++) ctx.fillRect(Math.random()*w, Math.random()*h, 1, 1);
                 ctx.globalAlpha = 1.0;
             },
 
-            layerGrunge(ctx, w, h, amount) {
-                if(amount <= 0.01) return;
-                ctx.fillStyle = '#1a0f00'; 
-                ctx.globalAlpha = amount;
-                const blobs = 3;
+            genGrunge(ctx, w, h, amt) {
+                if(amt < 0.05) return;
+                ctx.fillStyle = '#1a0f00';
+                ctx.globalAlpha = Math.min(0.8, amt);
+                const blobs = 2 + (amt * 10);
                 for(let i=0; i<blobs; i++) {
-                    const r = Math.random() * (Math.min(w,h)/2);
-                    if (r > 0) {
-                        ctx.beginPath();
-                        ctx.arc(Math.random()*w, Math.random()*h, r, 0, Math.PI*2);
-                        ctx.fill();
-                    }
+                    const s = Math.random() * (Math.min(w,h)/2);
+                    if(s > 2) ctx.fillRect(Math.random()*w, Math.random()*h, s, s); // Square grunge
                 }
                 ctx.globalAlpha = 1.0;
             }
@@ -425,86 +493,138 @@
                 model: null,
                 texture: null,
                 res: 512,
-                palette: ['#3e2723', '#4e342e', '#5d4037', '#6d4c41', '#795548', '#8d6e63'],
-                activeColor: -1,
-                pattern: 'wood',
-                lockedPattern: false,
+                layers: [
+                    { type:'wood', palette:['#3e2723','#4e342e','#5d4037','#6d4c41','#795548','#8d6e63'], scale:0.5, chaos:0.1, noise:0.2, contrast:0.5, sat:1 },
+                    { type:'stone', palette:['#000000','#1a1a1a','#333333','#4d4d4d','#666666','#808080'], scale:0.8, chaos:0.5, noise:0.5, contrast:0.5, sat:1, opacity:50 }
+                ],
+                activeLayer: 0,
                 view: { x: 0, y: 0, scale: 1, dragging: false, lx: 0, ly: 0 }
             },
-            
             els: {},
 
             init() {
                 const ids = ['fileInput','fileName','step2','step3','canvasWrapper','mainCanvas','viewportMsg',
-                             'loader','loaderText','resSelect','patternType','paletteBox','manualColorPicker',
-                             'searchQuery','refImg','noiseLevel','contrastLevel','wireframeToggle','toast-container',
-                             'searchModal','resultsList'];
+                             'loader','loaderText','resSelect','presetSelector','paletteBox','manualColorPicker',
+                             'searchQuery','refImg','noiseLevel','contrastLevel','scaleLevel','chaosLevel','satLevel','opacityLevel','opacityControl',
+                             'wireframeToggle','toast-container','searchModal','resultsList'];
                 ids.forEach(id => this.els[id] = document.getElementById(id));
 
                 this.ctx = this.els.mainCanvas.getContext('2d');
-                this.renderPalette();
+                this.initPresets();
+                this.setLayer(0);
                 this.setupCanvasEvents();
                 
                 this.els.manualColorPicker.addEventListener('input', (e) => {
-                    if(this.state.activeColor > -1) {
-                        this.state.palette[this.state.activeColor] = e.target.value;
+                    if(this.state.activeColorIdx > -1) {
+                        this.state.layers[this.state.activeLayer].palette[this.state.activeColorIdx] = e.target.value;
                         this.renderPalette();
                         if(this.state.texture) this.synthesize(true);
                     }
                 });
-                
                 window.addEventListener('resize', () => { if(this.state.texture) this.fitView(); });
             },
 
-            // --- CORE LOGIC ---
+            initPresets() {
+                const sel = this.els.presetSelector;
+                sel.innerHTML = '<option value="" disabled selected>Choose Material...</option>';
+                for (const [category, items] of Object.entries(PRESETS)) {
+                    const group = document.createElement('optgroup'); group.label = category;
+                    for (const name of Object.keys(items)) {
+                        const opt = document.createElement('option'); opt.value = `${category}:${name}`; opt.innerText = name; group.appendChild(opt);
+                    }
+                    sel.appendChild(group);
+                }
+            },
+
+            setLayer(idx) {
+                this.state.activeLayer = idx;
+                document.getElementById('tab-0').className = `layer-tab flex-1 py-2 text-xs font-bold text-center hover:bg-gray-800 ${idx===0?'active':''}`;
+                document.getElementById('tab-1').className = `layer-tab flex-1 py-2 text-xs font-bold text-center hover:bg-gray-800 ${idx===1?'active':''}`;
+                
+                const l = this.state.layers[idx];
+                this.els.scaleLevel.value = l.scale * 100;
+                this.els.chaosLevel.value = l.chaos * 100;
+                this.els.noiseLevel.value = l.noise * 100;
+                this.els.contrastLevel.value = l.contrast * 100;
+                this.els.satLevel.value = l.sat * 100;
+                if(idx===1) {
+                    this.els.opacityLevel.value = l.opacity;
+                    this.els.opacityControl.classList.remove('hidden');
+                } else {
+                    this.els.opacityControl.classList.add('hidden');
+                }
+                
+                ['scale','chaos','noise','contrast','sat'].forEach(k => this.updateUINum(k, l[k]*100));
+                if(idx===1) this.updateUINum('opacity', l.opacity);
+                this.renderPalette();
+            },
+
+            updateUINum(k, v) {
+                const el = document.getElementById(k==='noise'?'val-noise':k==='sat'?'val-sat':k==='opacity'?'val-opacity':`val-${k}`);
+                if(el) el.innerText = (k==='sat'||k==='opacity') ? v+'%' : v;
+            },
+
+            updateUIVal(key, val) {
+                const l = this.state.layers[this.state.activeLayer];
+                if(key === 'opacity') l.opacity = parseInt(val);
+                else l[key] = parseInt(val) / 100;
+                this.updateUINum(key, val);
+                if(this.state.texture) this.synthesize(true);
+            },
+
+            applyPreset(val) {
+                const [cat, name] = val.split(':');
+                const p = PRESETS[cat][name];
+                const l = this.state.layers[this.state.activeLayer];
+                l.type = p.type; l.scale = p.scale; l.chaos = p.chaos; l.noise = p.noise; l.contrast = p.contrast; l.sat = p.sat;
+                this.setLayer(this.state.activeLayer); // Refresh UI
+                if(this.state.texture) this.synthesize(true);
+                this.notify(`Applied: ${name}`, "success");
+            },
+
+            randomizeParams() {
+                const l = this.state.layers[this.state.activeLayer];
+                l.scale = (Math.floor(Math.random() * 90) + 10)/100;
+                l.chaos = (Math.floor(Math.random() * 60))/100;
+                l.noise = (Math.floor(Math.random() * 50) + 10)/100;
+                l.contrast = (Math.floor(Math.random() * 60) + 20)/100;
+                l.sat = (Math.floor(Math.random() * 100) + 50)/100;
+                this.setLayer(this.state.activeLayer);
+                if(this.state.texture) this.synthesize(true);
+                this.notify("Layer Remixed!", "success");
+            },
 
             synthesize(silent = false) {
                 if(!this.state.model) return this.notify("No model loaded", "error");
-                if(!silent) this.setLoading(true, "Generating Texture...");
+                if(!silent) this.setLoading(true, "Synthesizing...");
 
                 requestAnimationFrame(() => {
                     try {
                         const size = this.state.res;
-                        const cvs = document.createElement('canvas');
-                        cvs.width = size; cvs.height = size;
-                        const ctx = cvs.getContext('2d');
-                        
-                        ctx.clearRect(0, 0, size, size);
-
-                        const config = {
-                            type: this.state.pattern,
-                            palette: this.state.palette,
-                            noise: this.els.noiseLevel.value / 100,
-                            contrast: this.els.contrastLevel.value / 50
-                        };
+                        const cvs = document.createElement('canvas'); cvs.width = size; cvs.height = size;
+                        const ctx = cvs.getContext('2d'); ctx.clearRect(0, 0, size, size);
 
                         const geo = this.state.model["minecraft:geometry"][0];
                         const scaleX = size / (geo.description.texture_width || 64);
                         const scaleY = size / (geo.description.texture_height || 64);
 
-                        const bones = geo.bones || [];
-                        bones.forEach(bone => {
+                        geo.bones?.forEach(bone => {
                             if(!bone.cubes) return;
                             bone.cubes.forEach(cube => {
                                 if (Array.isArray(cube.uv)) {
-                                    const [u, v] = cube.uv;
-                                    const [w, h, d] = cube.size;
-                                    const faces = [
-                                        { x: u+d, y: v+d, w: w, h: h }, 
-                                        { x: u+d+w+d, y: v+d, w: w, h: h }, 
-                                        { x: u, y: v+d, w: d, h: h }, 
-                                        { x: u+d+w, y: v+d, w: d, h: h }, 
-                                        { x: u+d, y: v, w: w, h: d }, 
-                                        { x: u+d+w, y: v, w: w, h: d } 
-                                    ];
+                                    const [u, v] = cube.uv; const [w, h, d] = cube.size;
+                                    const faces = [{ x: u+d, y: v+d, w: w, h: h }, { x: u+d+w+d, y: v+d, w: w, h: h }, { x: u, y: v+d, w: d, h: h }, { x: u+d+w, y: v+d, w: d, h: h }, { x: u+d, y: v, w: w, h: d }, { x: u+d+w, y: v, w: w, h: d }];
                                     faces.forEach(f => {
-                                        TextureEngine.render(ctx, Math.floor(f.x*scaleX), Math.floor(f.y*scaleY), Math.ceil(f.w*scaleX), Math.ceil(f.h*scaleY), config);
+                                        const rx=Math.floor(f.x*scaleX), ry=Math.floor(f.y*scaleY), rw=Math.ceil(f.w*scaleX), rh=Math.ceil(f.h*scaleY);
+                                        TextureEngine.render(ctx, rx, ry, rw, rh, this.state.layers[0], false); // Base
+                                        if(this.state.layers[1].opacity > 0) TextureEngine.render(ctx, rx, ry, rw, rh, this.state.layers[1], true); // Overlay
                                     });
-                                } 
-                                else if (typeof cube.uv === 'object') {
-                                    Object.values(cube.uv).forEach(data => {
-                                        if(data.uv && data.uv_size) {
-                                            TextureEngine.render(ctx, Math.floor(data.uv[0]*scaleX), Math.floor(data.uv[1]*scaleY), Math.ceil(data.uv_size[0]*scaleX), Math.ceil(data.uv_size[1]*scaleY), config);
+                                } else if (typeof cube.uv === 'object') {
+                                    Object.values(cube.uv).forEach(d => {
+                                        if(d.uv && d.uv_size) {
+                                            const rx=Math.floor(d.uv[0]*scaleX), ry=Math.floor(d.uv[1]*scaleY), rw=Math.ceil(d.uv_size[0]*scaleX), rh=Math.ceil(d.uv_size[1]*scaleY);
+                                            TextureEngine.render(ctx, rx, ry, rw, rh, this.state.layers[0], false);
+                                            if(this.state.layers[1].opacity > 0) TextureEngine.render(ctx, rx, ry, rw, rh, this.state.layers[1], true);
                                         }
                                     });
                                 }
@@ -515,347 +635,143 @@
                         img.onload = () => {
                             this.state.texture = img;
                             this.renderPreview();
-                            this.fitView(); 
                             if(!silent) {
+                                this.fitView();
                                 this.setLoading(false);
                                 this.els.step3.classList.remove('step-locked');
                                 this.els.step3.classList.add('step-active');
-                                this.notify("Texture Generated", "success");
+                                this.notify("Texture Composite Generated", "success");
                             }
                         };
                         img.src = cvs.toDataURL();
-
-                    } catch(e) {
-                        this.setLoading(false);
-                        this.notify(e.message, "error");
-                        console.error(e);
-                    }
+                    } catch(e) { this.setLoading(false); this.notify(e.message, "error"); }
                 });
             },
 
-            // --- IMAGE ANALYSIS (DNA) ---
-
+            // --- DNA & Search ---
             async searchReference() {
-                const q = this.els.searchQuery.value.trim();
-                const u = "kingofcoding9"; 
-                const r = "Wireframe-Texture-Creator";
+                const input = document.getElementById('searchQuery');
+                if(!input) return this.notify("Search unavailable", "error");
+                const q = input.value.trim();
                 if(!q) return this.notify("Enter query", "error");
-                
-                this.setLoading(true, "Deep Scanning Repo...");
-                
+                this.setLoading(true, "Scanning...");
                 try {
-                    // 1. Get Default Branch
-                    const repoRes = await fetch(`https://api.github.com/repos/${u}/${r}`);
-                    if (!repoRes.ok) throw new Error("Repo connect fail");
-                    const repoData = await repoRes.json();
-                    const branch = repoData.default_branch;
-
-                    // 2. Recursive Tree Fetch
-                    const treeRes = await fetch(`https://api.github.com/repos/${u}/${r}/git/trees/${branch}?recursive=1`);
-                    if (!treeRes.ok) throw new Error("Tree fetch failed");
-                    const treeData = await treeRes.json();
-
-                    // 3. Client-Side Filtering
-                    const matches = treeData.tree.filter(node => {
-                        return node.type === 'blob' && 
-                               node.path.match(/\.(png|jpg|jpeg)$/i) && 
-                               node.path.toLowerCase().includes(q.toLowerCase());
-                    });
-
-                    if(!matches.length) throw new Error("No matches found");
-
-                    // 4. Construct Results
-                    const results = matches.map(node => ({
-                        name: node.path.split('/').pop(),
-                        path: node.path,
-                        download_url: `https://raw.githubusercontent.com/${u}/${r}/${branch}/${node.path}`,
-                        sha: node.sha,
-                        size: node.size
-                    }));
-
-                    this.showResults(results);
+                    const res = await fetch(`https://api.github.com/repos/kingofcoding9/Wireframe-Texture-Creator/git/trees/main?recursive=1`);
+                    if(!res.ok) throw new Error("Repo Error");
+                    const data = await res.json();
+                    const matches = data.tree.filter(n => n.type==='blob' && n.path.match(/\.(png|jpg)$/i) && n.path.toLowerCase().includes(q.toLowerCase()));
+                    if(!matches.length) throw new Error("No matches");
+                    this.showResults(matches.map(n => ({ name: n.path.split('/').pop(), path: n.path, download_url: `https://raw.githubusercontent.com/kingofcoding9/Wireframe-Texture-Creator/main/${n.path}`, sha: n.sha })));
                     this.setLoading(false);
-
-                } catch(e) {
-                    this.setLoading(false);
-                    this.notify(e.message || "Error", "error");
-                }
-            },
-
-            formatName(filename) {
-                return filename
-                    .replace(/\.[^/.]+$/, "") 
-                    .replace(/[-_]/g, " ")     
-                    .replace(/\b\w/g, l => l.toUpperCase()); 
+                } catch(e) { this.setLoading(false); this.notify(e.message, "error"); }
             },
 
             showResults(matches) {
-                const list = this.els.resultsList;
-                list.innerHTML = '';
-                
-                // Show up to 50 results (increased from 20)
+                const list = this.els.resultsList; list.innerHTML = '';
                 matches.slice(0, 50).forEach(file => {
-                    const prettyName = this.formatName(file.name);
                     const div = document.createElement('div');
                     div.className = "search-item p-3 bg-gray-800 border border-gray-700 rounded cursor-pointer transition-colors flex items-center gap-3 relative";
                     div.innerHTML = `
-                        <div class="w-12 h-12 bg-gray-700 rounded flex items-center justify-center text-xs text-gray-500 overflow-hidden shrink-0">
-                            <!-- Image will load here -->
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <div class="text-sm text-gray-200 font-bold truncate">${prettyName}</div>
-                            <div class="text-[10px] text-gray-500 truncate">${file.path}</div>
-                            <div class="flex gap-1 mt-1 h-3 w-full" id="palette-${file.sha}">
-                                <div class="w-full bg-gray-700/50 rounded animate-pulse"></div>
-                            </div>
-                        </div>
+                        <div class="w-10 h-10 bg-gray-700 rounded flex items-center justify-center text-xs text-gray-500 overflow-hidden shrink-0"><div class="animate-pulse w-full h-full bg-gray-600"></div></div>
+                        <div class="flex-1 min-w-0"><div class="text-xs text-gray-200 font-bold truncate">${file.name}</div><div class="flex gap-0.5 mt-1 h-2 w-full" id="palette-${file.sha}"></div></div>
                     `;
-                    div.onclick = () => {
-                        this.els.searchModal.classList.add('hidden');
-                        this.processImage(file.download_url, prettyName);
-                    };
+                    div.onclick = () => { this.els.searchModal.classList.add('hidden'); this.processImage(file.download_url, file.name); };
                     list.appendChild(div);
-
-                    const img = new Image();
-                    img.crossOrigin = "Anonymous";
-                    img.src = file.download_url;
+                    const img = new Image(); img.crossOrigin = "Anonymous"; img.src = file.download_url;
                     img.onload = () => {
                         const dna = TextureEngine.analyze(img);
-                        const paletteContainer = document.getElementById(`palette-${file.sha}`);
-                        if(paletteContainer) {
-                            paletteContainer.innerHTML = '';
-                            dna.palette.forEach(c => {
-                                const swatch = document.createElement('div');
-                                swatch.className = 'mini-swatch flex-1 h-full rounded-sm';
-                                swatch.style.backgroundColor = c;
-                                paletteContainer.appendChild(swatch);
-                            });
-                        }
-                        div.querySelector('.w-12').innerHTML = `<img src="${file.download_url}" class="w-full h-full object-cover">`;
+                        const pal = document.getElementById(`palette-${file.sha}`);
+                        if(pal) dna.palette.forEach(c => { const s=document.createElement('div'); s.className='flex-1 h-full rounded-sm'; s.style.backgroundColor=c; pal.appendChild(s); });
+                        div.querySelector('.w-10').innerHTML = `<img src="${file.download_url}" class="w-full h-full object-cover">`;
                     };
                 });
-
-                document.getElementById('searchMeta').textContent = `Found ${matches.length} matches`;
+                document.getElementById('searchMeta').textContent = `Found ${matches.length} items`;
                 this.els.searchModal.classList.remove('hidden');
             },
 
             processImage(url, name) {
-                this.setLoading(true, "Extracting DNA...");
-                const img = this.els.refImg;
-                img.crossOrigin = "Anonymous";
+                this.setLoading(true, "Analyzing DNA...");
+                const img = this.els.refImg; img.crossOrigin = "Anonymous";
                 img.onload = () => {
                     const dna = TextureEngine.analyze(img);
-                    
-                    this.state.palette = dna.palette;
+                    const l = this.state.layers[this.state.activeLayer];
+                    l.palette = dna.palette;
                     this.renderPalette();
-                    
-                    this.els.noiseLevel.value = Math.min(100, Math.floor(dna.edgeRatio * 200)); 
-                    document.getElementById('paletteSource').innerText = name ? name.substring(0, 20) : "Extracted";
-
-                    if(!this.state.lockedPattern) {
-                        this.setPattern(dna.suggestedPattern);
-                    }
-                    
+                    this.notify(`Palette loaded to Layer ${this.state.activeLayer+1}`, "success");
                     this.setLoading(false);
                     if(this.state.model) this.synthesize(true);
                 };
-                img.onerror = () => { this.setLoading(false); this.notify("CORS Error", "error"); };
                 img.src = url;
             },
 
-            // --- UI/UX ---
+            renderPalette() {
+                const box = this.els.paletteBox; box.innerHTML = '';
+                const pal = this.state.layers[this.state.activeLayer].palette;
+                pal.forEach((c,i) => {
+                    const d = document.createElement('div'); d.className = 'w-full h-full cursor-pointer hover:opacity-80'; d.style.backgroundColor = c;
+                    d.onclick = () => { this.state.activeColorIdx = i; this.els.manualColorPicker.click(); };
+                    box.appendChild(d);
+                });
+            },
 
             handleFileSelect(e) {
-                const f = e.target.files[0];
-                if(!f) return;
+                const f = e.target.files[0]; if(!f) return;
                 const r = new FileReader();
                 r.onload = (ev) => {
                     try {
-                        const j = JSON.parse(ev.target.result);
-                        if(!j["minecraft:geometry"]) throw new Error("Invalid Geometry");
-                        this.state.model = j;
+                        this.state.model = JSON.parse(ev.target.result);
                         document.getElementById('fileName').textContent = f.name;
                         document.getElementById('modelStatus').textContent = "Loaded";
                         document.getElementById('modelStatus').className = "text-[10px] text-green-400 bg-green-900 px-1.5 py-0.5 rounded border border-green-700";
                         this.els.step2.classList.remove('step-locked');
                         this.els.step2.classList.add('step-active');
-                        this.els.viewportMsg.style.display = 'none';
+                        this.els.viewportMsg.style.display = 'none'; // FIX: Hides overlay
                         this.synthesize();
-                    } catch(err) { this.notify(err.message, "error"); }
+                    } catch(e) { this.notify("Invalid JSON", "error"); }
                 };
                 r.readAsText(f);
             },
 
-            renderPalette() {
-                const box = this.els.paletteBox; box.innerHTML = '';
-                this.state.palette.forEach((c,i) => {
-                    const d = document.createElement('div');
-                    d.className = 'w-full h-full cursor-pointer hover:opacity-80';
-                    d.style.backgroundColor = c;
-                    d.onclick = () => { this.state.activeColor = i; this.els.manualColorPicker.click(); };
-                    box.appendChild(d);
-                });
-            },
-
-            setPattern(p, lock=false) {
-                this.state.pattern = p;
-                this.els.patternType.value = p;
-                if(lock) { this.state.lockedPattern = true; if(this.state.texture) this.synthesize(true); }
-            },
-
-            updateResolution() {
-                this.state.res = parseInt(this.els.resSelect.value);
-                if(this.state.texture) this.synthesize(true);
-            },
-
-            // --- CANVAS HANDLING ---
-
-            setupCanvasEvents() {
-                const w = this.els.canvasWrapper;
-                w.addEventListener('wheel', e => {
-                    e.preventDefault();
-                    this.state.view.scale = Math.max(0.1, Math.min(this.state.view.scale * (1 - e.deltaY * 0.001), 10));
-                    this.renderPreview();
-                });
-                w.addEventListener('pointerdown', e => {
-                    this.state.view.dragging = true;
-                    this.state.view.lx = e.clientX; this.state.view.ly = e.clientY;
-                    w.style.cursor = 'grabbing';
-                });
-                window.addEventListener('pointermove', e => {
-                    if(!this.state.view.dragging) return;
-                    this.state.view.x += e.clientX - this.state.view.lx;
-                    this.state.view.y += e.clientY - this.state.view.ly;
-                    this.state.view.lx = e.clientX; this.state.view.ly = e.clientY;
-                    this.renderPreview();
-                });
-                window.addEventListener('pointerup', () => {
-                    this.state.view.dragging = false; w.style.cursor = 'grab';
-                });
-            },
-
-            renderPreview() {
-                const cvs = this.els.mainCanvas;
-                if(!this.state.texture) {
-                    cvs.width = 0; cvs.height = 0;
-                    return;
-                }
-                
-                // Draw internal res
+            // ... [Keep renderPreview, fitView, export, setupCanvasEvents exactly as before] ...
+            
+            renderPreview() { 
+                const cvs = this.els.mainCanvas; if(!this.state.texture) return;
                 cvs.width = this.state.res; cvs.height = this.state.res;
-                const ctx = this.ctx;
-                
-                // 1. Draw Texture (Transparency preserved)
-                ctx.clearRect(0,0,cvs.width,cvs.height);
+                const ctx = this.ctx; ctx.clearRect(0,0,cvs.width,cvs.height);
                 ctx.drawImage(this.state.texture, 0, 0);
-
-                // 2. Draw Wireframe
                 if(this.els.wireframeToggle.checked && this.state.model) {
-                    ctx.lineWidth = Math.max(1, this.state.res/256);
-                    ctx.strokeStyle = '#00ffaa';
-                    const geo = this.state.model["minecraft:geometry"][0];
-                    const s = this.state.res / (geo.description.texture_width||64);
-                    
-                    geo.bones?.forEach(b => b.cubes?.forEach(c => {
-                        if(Array.isArray(c.uv)) {
-                            const [u,v] = c.uv; const [w,h,d] = c.size;
-                            const rects = [[u+d,v+d,w,h],[u+d+w+d,v+d,w,h],[u,v+d,d,h],[u+d+w,v+d,d,h],[u+d,v,w,d],[u+d+w,v,w,d]];
-                            rects.forEach(([rx,ry,rw,rh]) => ctx.strokeRect(rx*s,ry*s,rw*s,rh*s));
-                        } else if(typeof c.uv === 'object') {
-                            Object.values(c.uv).forEach(f => { if(f.uv && f.uv_size) ctx.strokeRect(f.uv[0]*s,f.uv[1]*s,f.uv_size[0]*s,f.uv_size[1]*s); });
-                        }
+                    ctx.lineWidth = Math.max(1, this.state.res/256); ctx.strokeStyle = '#00ffaa';
+                    const s = this.state.res / (this.state.model["minecraft:geometry"][0].description.texture_width||64);
+                    this.state.model["minecraft:geometry"][0].bones?.forEach(b => b.cubes?.forEach(c => {
+                        if(Array.isArray(c.uv)) { const [u,v]=c.uv; const [w,h,d]=c.size; [[u+d,v+d,w,h],[u+d+w+d,v+d,w,h],[u,v+d,d,h],[u+d+w,v+d,d,h],[u+d,v,w,d],[u+d+w,v,w,d]].forEach(([x,y,wi,hi])=>ctx.strokeRect(x*s,y*s,wi*s,hi*s)); }
+                        else Object.values(c.uv).forEach(f=>{if(f.uv&&f.uv_size)ctx.strokeRect(f.uv[0]*s,f.uv[1]*s,f.uv_size[0]*s,f.uv_size[1]*s)});
                     }));
                 }
-
-                // CSS View Transform
                 cvs.style.transform = `translate(${this.state.view.x}px, ${this.state.view.y}px) scale(${this.state.view.scale})`;
             },
-
-            fitView() {
-                const wrap = this.els.canvasWrapper;
-                const minDim = Math.min(wrap.clientWidth, wrap.clientHeight) - 40;
-                const scale = minDim / this.state.res;
-                this.state.view = { x: 0, y: 0, scale: scale, dragging: false };
-                this.renderPreview();
-            },
-
-            export() {
+            fitView() { const w=this.els.canvasWrapper; const sc=(Math.min(w.clientWidth,w.clientHeight)-40)/this.state.res; this.state.view={x:0,y:0,scale:sc,dragging:false}; this.renderPreview(); },
+            export() { 
                 if(!this.state.texture) return;
-                const a = document.createElement('a');
-                a.download = `texture_${Date.now()}.png`;
-                a.href = this.state.texture.src;
-                a.click();
-                
-                // 1. Clone Model
-                const geo = JSON.parse(JSON.stringify(this.state.model));
-                const g = geo["minecraft:geometry"][0];
-                
-                // 2. Calculate Scale Factor based on Target Res
-                const oldW = g.description.texture_width || 64;
-                const oldH = g.description.texture_height || 64;
-                const scaleX = this.state.res / oldW;
-                const scaleY = this.state.res / oldH;
-
-                // 3. Update Description
-                g.description.texture_width = this.state.res;
-                g.description.texture_height = this.state.res;
-
-                // 4. Convert Box UVs -> Per Face UVs & Scale All
-                if(g.bones) {
-                    g.bones.forEach(bone => {
-                        if(bone.cubes) {
-                            bone.cubes.forEach(cube => {
-                                if(Array.isArray(cube.uv)) {
-                                    // CONVERT BOX UV
-                                    const [u,v] = cube.uv;
-                                    const [w,h,d] = cube.size;
-                                    
-                                    // Create Per-Face Object
-                                    cube.uv = {
-                                        north: { uv: [(u+d)*scaleX, (v+d)*scaleY], uv_size: [w*scaleX, h*scaleY] },
-                                        south: { uv: [(u+d+w+d)*scaleX, (v+d)*scaleY], uv_size: [w*scaleX, h*scaleY] },
-                                        east:  { uv: [u*scaleX, (v+d)*scaleY], uv_size: [d*scaleX, h*scaleY] },
-                                        west:  { uv: [(u+d+w)*scaleX, (v+d)*scaleY], uv_size: [d*scaleX, h*scaleY] },
-                                        up:    { uv: [(u+d)*scaleX, v*scaleY], uv_size: [w*scaleX, d*scaleY] },
-                                        down:  { uv: [(u+d+w)*scaleX, v*scaleY], uv_size: [w*scaleX, d*scaleY] }
-                                    };
-                                } 
-                                else if (typeof cube.uv === 'object') {
-                                    // SCALE EXISTING PER-FACE
-                                    Object.values(cube.uv).forEach(face => {
-                                        if(face.uv && face.uv_size) {
-                                            face.uv[0] *= scaleX;
-                                            face.uv[1] *= scaleY;
-                                            face.uv_size[0] *= scaleX;
-                                            face.uv_size[1] *= scaleY;
-                                        }
-                                    });
-                                }
-                            });
-                        }
-                    });
-                }
-
-                // 5. Download
-                const b = new Blob([JSON.stringify(geo, null, 2)], {type:'application/json'});
-                const a2 = document.createElement('a');
-                a2.href = URL.createObjectURL(b);
-                a2.download = 'model.geo.json';
-                setTimeout(() => a2.click(), 500);
+                const a=document.createElement('a'); a.download=`texture_${Date.now()}.png`; a.href=this.state.texture.src; a.click();
+                const geo = JSON.parse(JSON.stringify(this.state.model)); const g = geo["minecraft:geometry"][0];
+                const sX = this.state.res / (g.description.texture_width || 64), sY = this.state.res / (g.description.texture_height || 64);
+                g.description.texture_width = this.state.res; g.description.texture_height = this.state.res;
+                g.bones?.forEach(b => b.cubes?.forEach(c => {
+                    if(Array.isArray(c.uv)) { const [u,v]=c.uv; const [w,h,d]=c.size; c.uv = { north:{uv:[(u+d)*sX,(v+d)*sY],uv_size:[w*sX,h*sY]}, south:{uv:[(u+d+w+d)*sX,(v+d)*sY],uv_size:[w*sX,h*sY]}, east:{uv:[u*sX,(v+d)*sY],uv_size:[d*sX,h*sY]}, west:{uv:[(u+d+w)*sX,(v+d)*sY],uv_size:[d*sX,h*sY]}, up:{uv:[(u+d)*sX,v*sY],uv_size:[w*sX,d*sY]}, down:{uv:[(u+d+w)*sX,v*sY],uv_size:[w*sX,d*sY]} }; }
+                    else if(typeof c.uv==='object') Object.values(c.uv).forEach(f=>{if(f.uv&&f.uv_size){f.uv[0]*=sX;f.uv[1]*=sY;f.uv_size[0]*=sX;f.uv_size[1]*=sY}});
+                }));
+                const b=new Blob([JSON.stringify(geo,null,2)],{type:'application/json'}); const a2=document.createElement('a'); a2.href=URL.createObjectURL(b); a2.download='model.geo.json'; setTimeout(()=>a2.click(),500);
             },
-
-            notify(msg, type) {
-                const t = document.createElement('div');
-                t.className = `px-3 py-2 rounded shadow-lg text-white text-xs ${type==='error'?'bg-red-900':'bg-green-900'} animate-bounce`;
-                t.innerText = msg;
-                this.els['toast-container'].appendChild(t);
-                setTimeout(() => t.remove(), 3000);
+            setupCanvasEvents() {
+                const w=this.els.canvasWrapper;
+                w.addEventListener('wheel',e=>{e.preventDefault();this.state.view.scale=Math.max(0.1,Math.min(this.state.view.scale*(1-e.deltaY*0.001),10));this.renderPreview();});
+                w.addEventListener('pointerdown',e=>{this.state.view.dragging=true;this.state.view.lx=e.clientX;this.state.view.ly=e.clientY;});
+                window.addEventListener('pointermove',e=>{if(this.state.view.dragging){this.state.view.x+=e.clientX-this.state.view.lx;this.state.view.y+=e.clientY-this.state.view.ly;this.state.view.lx=e.clientX;this.state.view.ly=e.clientY;this.renderPreview();}});
+                window.addEventListener('pointerup',()=>this.state.view.dragging=false);
             },
-
-            setLoading(show, txt) {
-                this.els.loaderText.textContent = txt;
-                this.els.loader.style.display = show ? 'flex' : 'none';
-            }
+            notify(m,t) { const d=document.createElement('div'); d.className=`px-3 py-2 rounded shadow-lg text-white text-xs ${t==='error'?'bg-red-900':'bg-green-900'} animate-bounce`; d.innerText=m; this.els['toast-container'].appendChild(d); setTimeout(()=>d.remove(),3000); },
+            setLoading(s,t) { this.els.loaderText.innerText=t; this.els.loader.style.display=s?'flex':'none'; },
+            updateResolution() { this.state.res = parseInt(this.els.resSelect.value); if(this.state.texture) this.synthesize(true); }
         };
 
         window.app = App;
