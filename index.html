@@ -2,10 +2,19 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>High-Res Wireframe Model Generator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Texture DNA Lab | Advanced</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* Base Styles */
+        body { background-color: #0b0f19; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #111827; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        
+        /* Utility */
         .checkerboard {
             background-color: #1a1a1a;
             background-image:
@@ -16,423 +25,841 @@
             background-size: 20px 20px;
             background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
         }
+
+        .loader {
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top: 3px solid #10b981;
+            border-radius: 50%;
+            width: 20px; height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Step Logic */
+        .step-locked { opacity: 0.5; pointer-events: none; filter: grayscale(1); }
+        .step-active { opacity: 1; pointer-events: auto; filter: grayscale(0); }
+
+        /* Mobile specific adjustments */
+        @media (max-width: 768px) {
+            body { overflow: auto; }
+            .main-layout { flex-direction: column; height: auto; overflow: visible; }
+            .sidebar { width: 100%; height: auto; overflow: visible; border-right: none; border-bottom: 1px solid #1f2937; }
+            .canvas-area { height: 400px; width: 100%; }
+        }
+
+        /* Search Result Modal */
+        .search-item:hover { background-color: #1f2937; border-color: #10b981; }
+        .mini-swatch { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
+<body class="h-screen flex flex-col text-sm">
 
-    <div class="container mx-auto p-4 max-w-6xl">
-        <header class="mb-8 text-center">
-            <h1 class="text-4xl font-bold text-blue-400 mb-2">Wireframe & Model Generator</h1>
-            <p class="text-gray-400">Upload a <code class="bg-gray-800 px-1 rounded">.bbmodel</code>, <code class="bg-gray-800 px-1 rounded">.obj</code>, or <code class="bg-gray-800 px-1 rounded">.geo.json</code> file.</p>
-        </header>
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-max max-w-[90vw] pointer-events-none"></div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            
-            <!-- Sidebar Controls -->
-            <div class="lg:col-span-4 space-y-6">
-                
-                <!-- Upload Panel -->
-                <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
-                    <label class="block text-sm font-bold mb-2 text-blue-300">1. Upload Model</label>
-                    <div class="relative border-2 border-dashed border-gray-600 rounded-lg p-6 text-center hover:border-blue-500 transition-colors cursor-pointer" onclick="document.getElementById('fileInput').click()">
-                        <p class="text-gray-400 text-sm pointer-events-none" id="fileNameDisplay">Click to browse or drag file here</p>
-                        <input type="file" id="fileInput" accept=".bbmodel,.obj,.json,.txt" class="hidden" onchange="handleFileSelect(event)">
-                    </div>
-                    <div id="fileInfo" class="mt-2 text-xs text-gray-500 hidden">
-                        Type: <span id="fileTypeLabel">Unknown</span> | Res: <span id="fileResLabel">0x0</span>
-                    </div>
-                    <div id="errorMsg" class="mt-2 text-xs text-red-400 hidden bg-red-900/20 p-2 rounded border border-red-800"></div>
+    <!-- Hidden Inputs -->
+    <input type="file" id="fileInput" accept=".json,.txt" class="hidden" onchange="app.handleFileSelect(event)">
+    <input type="color" id="manualColorPicker" class="opacity-0 absolute -z-10">
+    <img id="refImg" class="hidden" crossorigin="anonymous">
+
+    <!-- SEARCH RESULTS MODAL -->
+    <div id="searchModal" class="fixed inset-0 bg-black/80 z-40 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl w-full max-w-md flex flex-col max-h-[80vh]">
+            <div class="p-4 border-b border-gray-800 flex justify-between items-center">
+                <div>
+                    <h3 class="font-bold text-green-400">Texture Library</h3>
+                    <p class="text-[10px] text-gray-500" id="searchMeta">Searching...</p>
                 </div>
-
-                <!-- High Res Generator Panel -->
-                <div id="highResPanel" class="bg-gradient-to-br from-indigo-900 to-gray-800 p-6 rounded-lg shadow-lg border border-indigo-700 opacity-50 pointer-events-none transition-opacity">
-                    <label class="block text-sm font-bold mb-2 text-indigo-300 flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m8 22 4-10 4 10"/><path d="M9 22v-4a3 3 0 0 0-3-3H2"/><path d="M15 22v-4a3 3 0 0 0 3-3h4"/></svg>
-                        2. High-Res Model Generator
-                    </label>
-                    <p class="text-xs text-gray-300 mb-4">
-                        Requires <code>.geo.json</code>. Converts everything to High-Res Per-Face UVs (512px) with sharp lines.
-                    </p>
-                    <button onclick="generateHighResGeo()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded transition-colors shadow-lg flex items-center justify-center gap-2">
-                        <span>Download High-Res Files</span>
-                        <span class="text-xs bg-indigo-800 px-1 rounded">512px</span>
-                    </button>
-                    <div id="geoWarning" class="text-xs text-orange-400 mt-2 hidden">
-                        * Please upload a .geo.json file for this feature.
-                    </div>
-                </div>
-
-                <!-- Simple Texture Export -->
-                <div id="settingsPanel" class="bg-gray-800 p-6 rounded-lg shadow-lg opacity-50 pointer-events-none transition-opacity">
-                    <label class="block text-sm font-bold mb-2 text-blue-300">3. Simple Texture Export</label>
-                    <div class="grid grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label class="text-xs text-gray-400 block mb-1">Line Color</label>
-                            <input type="color" id="strokeColor" value="#38bdf8" class="w-full h-8 bg-gray-900 border border-gray-600 rounded cursor-pointer" oninput="requestRedraw()">
-                        </div>
-                        <div>
-                            <label class="text-xs text-gray-400 block mb-1">Width (px)</label>
-                            <input type="number" id="strokeWidth" value="1" min="1" max="20" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 focus:outline-none focus:border-blue-500" onchange="requestRedraw()">
-                        </div>
-                    </div>
-                    <button onclick="downloadImage()" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded transition-colors flex items-center justify-center gap-2">
-                        Download PNG Only
-                    </button>
-                </div>
+                <button onclick="document.getElementById('searchModal').classList.add('hidden')" class="text-gray-500 hover:text-white">✕</button>
             </div>
-
-            <!-- Preview Area -->
-            <div class="lg:col-span-8 bg-gray-800 rounded-lg shadow-lg p-4 flex flex-col h-[600px]">
-                <div class="flex-1 overflow-auto relative rounded border border-gray-600 bg-gray-900 custom-scrollbar flex items-center justify-center">
-                    <div class="checkerboard absolute inset-0 z-0"></div>
-                    <canvas id="textureCanvas" class="relative z-10 shadow-2xl max-w-none"></canvas>
-                    <div id="placeholderText" class="absolute z-20 inset-0 flex flex-col items-center justify-center text-gray-500 pointer-events-none">
-                        <span>Preview will appear here</span>
-                    </div>
-                </div>
-                <div class="mt-2 text-right text-xs text-gray-500">
-                    Preview uses native file resolution.
-                </div>
+            <div id="resultsList" class="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                <!-- Results injected here -->
+            </div>
+            <div class="p-3 border-t border-gray-800 text-center">
+                <p class="text-[10px] text-gray-500">Live DNA extraction active</p>
             </div>
         </div>
     </div>
 
-    <canvas id="highResCanvas" style="display:none;"></canvas>
+    <!-- Header -->
+    <header class="h-12 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-4 shrink-0 z-20">
+        <div class="flex items-center gap-2">
+            <div class="w-6 h-6 bg-gradient-to-br from-green-500 to-blue-600 rounded flex items-center justify-center font-bold text-white text-xs">T</div>
+            <h1 class="font-bold text-gray-200 tracking-wide">Texture DNA</h1>
+        </div>
+        <div class="flex items-center gap-3">
+            <select id="resSelect" onchange="app.updateResolution()" class="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded px-2 py-1 focus:outline-none">
+                <option value="64">64px</option>
+                <option value="128">128px</option>
+                <option value="256">256px</option>
+                <option value="512" selected>512px</option>
+                <option value="1024">1024px</option>
+            </select>
+            <button onclick="location.reload()" class="text-xs text-gray-500 hover:text-white">Reset</button>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="main-layout flex-1 flex h-full overflow-hidden">
+        
+        <!-- SIDEBAR (Controls) -->
+        <div class="sidebar w-[320px] bg-gray-900 border-r border-gray-800 flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
+            
+            <!-- 1. Geometry Section -->
+            <div class="p-4 border-b border-gray-800">
+                <div class="flex justify-between items-center mb-2">
+                    <label class="font-bold text-blue-400 text-xs uppercase">1. Geometry</label>
+                    <span id="modelStatus" class="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded border border-gray-700">None</span>
+                </div>
+                <div onclick="document.getElementById('fileInput').click()" 
+                     class="border border-dashed border-gray-600 bg-gray-800/40 hover:bg-gray-800 hover:border-blue-400 transition-all rounded p-4 cursor-pointer text-center group">
+                    <p id="fileName" class="text-xs text-gray-400 group-hover:text-blue-300 font-medium">Click to Upload .geo.json</p>
+                </div>
+            </div>
+
+            <!-- 2. Synthesis Section -->
+            <div id="step2" class="p-4 border-b border-gray-800 step-locked flex-1">
+                <div class="flex justify-between items-center mb-3">
+                    <label class="font-bold text-green-400 text-xs uppercase">2. Texture Engine</label>
+                </div>
+
+                <!-- Reference Search -->
+                <div class="space-y-2 mb-4">
+                    <label class="text-[10px] text-gray-500 uppercase">DNA Source</label>
+                    <div class="flex gap-1">
+                        <input id="searchQuery" type="text" placeholder="Search (e.g. 'oak', 'stone')" 
+                               class="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-white focus:border-green-500 focus:outline-none"
+                               onkeypress="if(event.key==='Enter') app.searchReference()">
+                        <button onclick="app.searchReference()" class="bg-gray-700 hover:bg-gray-600 text-white px-2.5 rounded text-xs">🔍</button>
+                    </div>
+                </div>
+
+                <!-- Engine Controls -->
+                <div class="bg-black/20 rounded border border-gray-700 p-3 mb-4 space-y-3">
+                    
+                    <!-- Structure Type -->
+                    <div class="flex justify-between items-center">
+                        <span class="text-[10px] text-gray-400 uppercase">Structure</span>
+                        <select id="patternType" onchange="app.setPattern(this.value, true)" class="bg-gray-800 border border-gray-600 text-[10px] text-green-400 rounded px-1 cursor-pointer w-24">
+                            <option value="wood">Fibers (Wood)</option>
+                            <option value="bricks">Grid (Bricks)</option>
+                            <option value="stone">Noise (Stone)</option>
+                            <option value="metal">Smooth (Metal)</option>
+                            <option value="scales">Cells (Scales)</option>
+                        </select>
+                    </div>
+
+                    <!-- Palette -->
+                    <div>
+                        <div class="flex justify-between text-[10px] text-gray-400 mb-1">
+                            <span>Palette</span>
+                            <span id="paletteSource" class="text-gray-600">Default</span>
+                        </div>
+                        <div class="grid grid-cols-6 gap-0.5 h-6 rounded overflow-hidden border border-gray-700" id="paletteBox"></div>
+                    </div>
+
+                    <!-- Sliders -->
+                    <div class="space-y-2 pt-2 border-t border-gray-700/50">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] text-gray-400">Roughness</span>
+                            <input type="range" id="noiseLevel" min="0" max="100" value="30" class="w-20 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] text-gray-400">Contrast</span>
+                            <input type="range" id="contrastLevel" min="0" max="100" value="50" class="w-20 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="app.synthesize()" class="w-full py-2.5 bg-green-600 hover:bg-green-500 text-white font-bold text-xs rounded shadow-lg shadow-green-900/20 transition-all">
+                    Generate Texture
+                </button>
+                
+                <div class="mt-2 text-center">
+                    <label class="text-[10px] text-gray-400 flex items-center justify-center gap-1 cursor-pointer">
+                        <input type="checkbox" id="wireframeToggle" checked onchange="app.renderPreview()" class="accent-green-500"> Show UV Overlay
+                    </label>
+                </div>
+            </div>
+
+            <!-- 3. Export -->
+            <div id="step3" class="p-4 step-locked">
+                 <button onclick="app.export()" class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded">
+                    Download Assets
+                </button>
+            </div>
+        </div>
+
+        <!-- CANVAS AREA -->
+        <div class="canvas-area flex-1 bg-[#050505] relative flex flex-col min-w-0 overflow-hidden">
+            <div id="canvasWrapper" class="absolute inset-0 checkerboard flex items-center justify-center cursor-grab touch-none">
+                <canvas id="mainCanvas" class="shadow-2xl"></canvas>
+            </div>
+            
+            <!-- Instructions Overlay -->
+            <div id="viewportMsg" class="absolute inset-0 flex flex-col items-center justify-center text-gray-600 pointer-events-none z-10 bg-black/50 backdrop-blur-sm transition-opacity duration-300">
+                <p class="text-sm font-medium text-gray-300">Workspace Empty</p>
+                <p class="text-xs mt-1 opacity-60">Upload .geo.json to begin</p>
+            </div>
+
+            <!-- Loader -->
+            <div id="loader" class="absolute inset-0 bg-black/80 z-50 hidden flex-col items-center justify-center backdrop-blur-sm">
+                <div class="loader mb-2"></div>
+                <p id="loaderText" class="text-green-400 text-[10px] font-mono uppercase animate-pulse">Processing...</p>
+            </div>
+
+            <!-- View Controls -->
+            <div class="absolute bottom-4 right-4 flex gap-2 z-20">
+                <button onclick="app.fitView()" class="bg-gray-800/80 hover:bg-gray-700 text-white p-2 rounded backdrop-blur border border-gray-600 shadow-lg" title="Reset View">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <script>
-        // Global State
-        let currentFileContent = null;
-        let currentFileType = null; 
-        let modelRes = { w: 64, h: 64 };
-        
-        const canvas = document.getElementById('textureCanvas');
-        const ctx = canvas.getContext('2d');
-
-        function handleFileSelect(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            document.getElementById('fileNameDisplay').textContent = file.name;
-            const fileName = file.name.toLowerCase();
-            const errorEl = document.getElementById('errorMsg');
-            errorEl.classList.add('hidden');
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                currentFileContent = e.target.result;
+        /**
+         * Texture DNA - Advanced Procedural Generation Engine
+         */
+        const TextureEngine = {
+            
+            // ANALYZE IMAGE DNA
+            analyze(imgElement) {
+                // Use a small canvas for fast analysis
+                const cvs = document.createElement('canvas'); 
+                cvs.width = 64; cvs.height = 64;
+                const ctx = cvs.getContext('2d'); 
+                ctx.drawImage(imgElement, 0, 0, 64, 64);
+                const data = ctx.getImageData(0, 0, 64, 64).data;
                 
-                if (fileName.endsWith('.obj')) {
-                    currentFileType = 'obj';
-                    processOBJ(currentFileContent);
-                    setMode('simple');
-                } else if (fileName.endsWith('.bbmodel')) {
-                    currentFileType = 'bbmodel';
-                    processBBModel(currentFileContent);
-                    setMode('simple');
-                } else if (fileName.endsWith('.json') || fileName.includes('.geo') || fileName.endsWith('.txt')) {
-                    // Check JSON content first
-                    const check = checkBedrockType(currentFileContent);
-                    if (check.isValid) {
-                        currentFileType = 'geo';
-                        processBedrockGeo(currentFileContent, false);
-                        setMode('all');
-                    } else {
-                        // Show specific error
-                        errorEl.textContent = check.error;
-                        errorEl.classList.remove('hidden');
-                        setMode('none');
+                const colors = {};
+                let edges = 0;
+                
+                for(let i=0; i<data.length; i+=4) {
+                    if(data[i+3]<128) continue; // Skip transparency
+                    const r=data[i], g=data[i+1], b=data[i+2];
+                    const k = `${Math.round(r/10)*10},${Math.round(g/10)*10},${Math.round(b/10)*10}`;
+                    colors[k] = (colors[k]||0)+1;
+
+                    if(i < data.length-4) {
+                        const lum1 = (r+g+b)/3;
+                        const lum2 = (data[i+4]+data[i+5]+data[i+6])/3;
+                        if(Math.abs(lum1-lum2) > 20) edges++;
                     }
-                } else {
-                    alert("Unsupported file type.");
+                }
+
+                const sorted = Object.keys(colors).sort((a,b) => colors[b]-colors[a]).slice(0,10);
+                sorted.sort((a,b) => {
+                     const [r1,g1,b1] = a.split(',').map(Number);
+                     const [r2,g2,b2] = b.split(',').map(Number);
+                     return (r1+g1+b1) - (r2+g2+b2);
+                });
+                
+                const palette = [];
+                for(let i=0; i<6; i++) {
+                    const c = sorted[Math.floor(i*(sorted.length/6))] || sorted[0];
+                    if(c) palette.push(`rgb(${c})`);
+                }
+
+                // Determine pattern
+                const edgeRatio = edges / (64*64);
+                let suggestedPattern = 'metal';
+                if(edgeRatio > 0.3) suggestedPattern = 'stone';
+                else if(edgeRatio > 0.1) suggestedPattern = 'wood';
+
+                return { palette, edgeRatio, suggestedPattern };
+            },
+
+            // Layered Generation System
+            render(ctx, x, y, w, h, config) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(x, y, w, h);
+                ctx.clip();
+                ctx.translate(x, y);
+
+                const { type, palette, noise, contrast } = config;
+                const p = palette; 
+                
+                // Base
+                const baseVar = (Math.random() - 0.5) * 0.05; 
+                ctx.fillStyle = p[2]; 
+                ctx.fillRect(0, 0, w, h);
+
+                // Structure
+                ctx.save();
+                if (type === 'wood') this.layerFibers(ctx, w, h, p, contrast);
+                else if (type === 'bricks') this.layerGrid(ctx, w, h, p, contrast);
+                else if (type === 'scales') this.layerCells(ctx, w, h, p, contrast);
+                else if (type === 'metal') this.layerSmooth(ctx, w, h, p, contrast);
+                else this.layerNoise(ctx, w, h, p, contrast); 
+                ctx.restore();
+
+                // Detail
+                this.layerGrain(ctx, w, h, noise);
+                this.layerGrunge(ctx, w, h, noise * 0.5);
+
+                ctx.restore();
+            },
+
+            // --- Generators ---
+
+            layerFibers(ctx, w, h, p, strength) {
+                const isHorz = w >= h;
+                const bands = isHorz ? Math.ceil(h/4) : Math.ceil(w/4);
+                const size = (isHorz ? h : w) / bands;
+
+                for(let i=0; i<bands; i++) {
+                    const pos = i*size;
+                    ctx.fillStyle = (i%2===0) ? p[2] : p[3];
+                    isHorz ? ctx.fillRect(0, pos, w, size) : ctx.fillRect(pos, 0, size, h);
+                    ctx.fillStyle = p[1]; 
+                    ctx.globalAlpha = 0.1 + (strength * 0.2);
+                    const streaks = Math.floor(isHorz ? w/2 : h/2);
+                    for(let k=0; k<streaks; k++) {
+                        const len = Math.random() * (isHorz ? w/2 : h/2);
+                        const thick = Math.random() < 0.3 ? 2 : 1;
+                        if(isHorz) ctx.fillRect(Math.random()*w, pos + Math.random()*size, len, thick);
+                        else ctx.fillRect(pos + Math.random()*size, Math.random()*h, thick, len);
+                    }
+                    ctx.globalAlpha = 0.6;
+                    ctx.fillStyle = p[0];
+                    if(i>0) isHorz ? ctx.fillRect(0, pos, w, 1) : ctx.fillRect(pos, 0, 1, h);
+                    ctx.globalAlpha = 1.0;
+                }
+            },
+
+            layerGrid(ctx, w, h, p, strength) {
+                ctx.fillStyle = p[0]; ctx.fillRect(0,0,w,h);
+                const rows = 3; const cols = 2;
+                const bh = h/rows; const bw = w/cols;
+                const gap = Math.max(1, w/64);
+
+                for(let r=0; r<=rows; r++) {
+                    const off = (r%2) * (-bw/2);
+                    for(let c=0; c<=cols+1; c++) {
+                        const rnd = Math.random();
+                        if(rnd > 0.9) ctx.fillStyle = p[4]; 
+                        else if(rnd > 0.4) ctx.fillStyle = p[3]; 
+                        else ctx.fillStyle = p[2]; 
+                        ctx.fillRect(c*bw + off + gap, r*bh + gap, bw-gap*2, bh-gap*2);
+                    }
+                }
+            },
+
+            layerCells(ctx, w, h, p, strength) {
+                if (w < 1 || h < 1) return;
+                const scale = Math.max(2, Math.min(w,h)/4);
+                const radius = Math.max(0.1, scale/2 - 1); 
+                for(let y=0; y<h; y+=scale) {
+                    for(let x=0; x<w; x+=scale) {
+                        ctx.fillStyle = (Math.random()>0.5) ? p[3] : p[2];
+                        ctx.beginPath();
+                        ctx.arc(x + scale/2, y + scale/2, radius, 0, Math.PI*2);
+                        ctx.fill();
+                    }
+                }
+            },
+
+            layerSmooth(ctx, w, h, p, strength) {
+                const grad = ctx.createLinearGradient(0,0,w,h);
+                grad.addColorStop(0, p[2]);
+                grad.addColorStop(1, p[4]);
+                ctx.fillStyle = grad;
+                ctx.fillRect(0,0,w,h);
+                ctx.strokeStyle = p[5];
+                ctx.globalAlpha = 0.2 * strength;
+                ctx.beginPath();
+                for(let i=0; i<5; i++) {
+                    ctx.moveTo(Math.random()*w, Math.random()*h);
+                    ctx.lineTo(Math.random()*w, Math.random()*h);
+                }
+                ctx.stroke();
+                ctx.globalAlpha = 1.0;
+            },
+
+            layerNoise(ctx, w, h, p, strength) {
+                const spots = (w*h) / 10;
+                for(let i=0; i<spots; i++) {
+                    ctx.fillStyle = (Math.random()>0.5) ? p[1] : p[3];
+                    ctx.globalAlpha = 0.3 * strength;
+                    const r = Math.random() * (Math.min(w,h)/4);
+                    if(r > 0) {
+                        ctx.beginPath();
+                        ctx.arc(Math.random()*w, Math.random()*h, r, 0, Math.PI*2);
+                        ctx.fill();
+                    }
+                }
+                ctx.globalAlpha = 1.0;
+            },
+
+            layerGrain(ctx, w, h, amount) {
+                ctx.fillStyle = '#000';
+                ctx.globalAlpha = amount * 0.15;
+                const count = w * h * 0.4;
+                for(let i=0; i<count; i++) {
+                    ctx.fillRect(Math.random()*w, Math.random()*h, 1, 1);
+                }
+                ctx.globalAlpha = 1.0;
+            },
+
+            layerGrunge(ctx, w, h, amount) {
+                if(amount <= 0.01) return;
+                ctx.fillStyle = '#1a0f00'; 
+                ctx.globalAlpha = amount;
+                const blobs = 3;
+                for(let i=0; i<blobs; i++) {
+                    const r = Math.random() * (Math.min(w,h)/2);
+                    if (r > 0) {
+                        ctx.beginPath();
+                        ctx.arc(Math.random()*w, Math.random()*h, r, 0, Math.PI*2);
+                        ctx.fill();
+                    }
+                }
+                ctx.globalAlpha = 1.0;
+            }
+        };
+
+        const App = {
+            state: {
+                model: null,
+                texture: null,
+                res: 512,
+                palette: ['#3e2723', '#4e342e', '#5d4037', '#6d4c41', '#795548', '#8d6e63'],
+                activeColor: -1,
+                pattern: 'wood',
+                lockedPattern: false,
+                view: { x: 0, y: 0, scale: 1, dragging: false, lx: 0, ly: 0 }
+            },
+            
+            els: {},
+
+            init() {
+                const ids = ['fileInput','fileName','step2','step3','canvasWrapper','mainCanvas','viewportMsg',
+                             'loader','loaderText','resSelect','patternType','paletteBox','manualColorPicker',
+                             'searchQuery','refImg','noiseLevel','contrastLevel','wireframeToggle','toast-container',
+                             'searchModal','resultsList'];
+                ids.forEach(id => this.els[id] = document.getElementById(id));
+
+                this.ctx = this.els.mainCanvas.getContext('2d');
+                this.renderPalette();
+                this.setupCanvasEvents();
+                
+                this.els.manualColorPicker.addEventListener('input', (e) => {
+                    if(this.state.activeColor > -1) {
+                        this.state.palette[this.state.activeColor] = e.target.value;
+                        this.renderPalette();
+                        if(this.state.texture) this.synthesize(true);
+                    }
+                });
+                
+                window.addEventListener('resize', () => { if(this.state.texture) this.fitView(); });
+            },
+
+            // --- CORE LOGIC ---
+
+            synthesize(silent = false) {
+                if(!this.state.model) return this.notify("No model loaded", "error");
+                if(!silent) this.setLoading(true, "Generating Texture...");
+
+                requestAnimationFrame(() => {
+                    try {
+                        const size = this.state.res;
+                        const cvs = document.createElement('canvas');
+                        cvs.width = size; cvs.height = size;
+                        const ctx = cvs.getContext('2d');
+                        
+                        ctx.clearRect(0, 0, size, size);
+
+                        const config = {
+                            type: this.state.pattern,
+                            palette: this.state.palette,
+                            noise: this.els.noiseLevel.value / 100,
+                            contrast: this.els.contrastLevel.value / 50
+                        };
+
+                        const geo = this.state.model["minecraft:geometry"][0];
+                        const scaleX = size / (geo.description.texture_width || 64);
+                        const scaleY = size / (geo.description.texture_height || 64);
+
+                        const bones = geo.bones || [];
+                        bones.forEach(bone => {
+                            if(!bone.cubes) return;
+                            bone.cubes.forEach(cube => {
+                                if (Array.isArray(cube.uv)) {
+                                    const [u, v] = cube.uv;
+                                    const [w, h, d] = cube.size;
+                                    const faces = [
+                                        { x: u+d, y: v+d, w: w, h: h }, 
+                                        { x: u+d+w+d, y: v+d, w: w, h: h }, 
+                                        { x: u, y: v+d, w: d, h: h }, 
+                                        { x: u+d+w, y: v+d, w: d, h: h }, 
+                                        { x: u+d, y: v, w: w, h: d }, 
+                                        { x: u+d+w, y: v, w: w, h: d } 
+                                    ];
+                                    faces.forEach(f => {
+                                        TextureEngine.render(ctx, Math.floor(f.x*scaleX), Math.floor(f.y*scaleY), Math.ceil(f.w*scaleX), Math.ceil(f.h*scaleY), config);
+                                    });
+                                } 
+                                else if (typeof cube.uv === 'object') {
+                                    Object.values(cube.uv).forEach(data => {
+                                        if(data.uv && data.uv_size) {
+                                            TextureEngine.render(ctx, Math.floor(data.uv[0]*scaleX), Math.floor(data.uv[1]*scaleY), Math.ceil(data.uv_size[0]*scaleX), Math.ceil(data.uv_size[1]*scaleY), config);
+                                        }
+                                    });
+                                }
+                            });
+                        });
+
+                        const img = new Image();
+                        img.onload = () => {
+                            this.state.texture = img;
+                            this.renderPreview();
+                            this.fitView(); 
+                            if(!silent) {
+                                this.setLoading(false);
+                                this.els.step3.classList.remove('step-locked');
+                                this.els.step3.classList.add('step-active');
+                                this.notify("Texture Generated", "success");
+                            }
+                        };
+                        img.src = cvs.toDataURL();
+
+                    } catch(e) {
+                        this.setLoading(false);
+                        this.notify(e.message, "error");
+                        console.error(e);
+                    }
+                });
+            },
+
+            // --- IMAGE ANALYSIS (DNA) ---
+
+            async searchReference() {
+                const q = this.els.searchQuery.value.trim();
+                const u = "kingofcoding9"; 
+                const r = "Wireframe-Texture-Creator";
+                if(!q) return this.notify("Enter query", "error");
+                
+                this.setLoading(true, "Deep Scanning Repo...");
+                
+                try {
+                    // 1. Get Default Branch
+                    const repoRes = await fetch(`https://api.github.com/repos/${u}/${r}`);
+                    if (!repoRes.ok) throw new Error("Repo connect fail");
+                    const repoData = await repoRes.json();
+                    const branch = repoData.default_branch;
+
+                    // 2. Recursive Tree Fetch
+                    const treeRes = await fetch(`https://api.github.com/repos/${u}/${r}/git/trees/${branch}?recursive=1`);
+                    if (!treeRes.ok) throw new Error("Tree fetch failed");
+                    const treeData = await treeRes.json();
+
+                    // 3. Client-Side Filtering
+                    const matches = treeData.tree.filter(node => {
+                        return node.type === 'blob' && 
+                               node.path.match(/\.(png|jpg|jpeg)$/i) && 
+                               node.path.toLowerCase().includes(q.toLowerCase());
+                    });
+
+                    if(!matches.length) throw new Error("No matches found");
+
+                    // 4. Construct Results
+                    const results = matches.map(node => ({
+                        name: node.path.split('/').pop(),
+                        path: node.path,
+                        download_url: `https://raw.githubusercontent.com/${u}/${r}/${branch}/${node.path}`,
+                        sha: node.sha,
+                        size: node.size
+                    }));
+
+                    this.showResults(results);
+                    this.setLoading(false);
+
+                } catch(e) {
+                    this.setLoading(false);
+                    this.notify(e.message || "Error", "error");
+                }
+            },
+
+            formatName(filename) {
+                return filename
+                    .replace(/\.[^/.]+$/, "") 
+                    .replace(/[-_]/g, " ")     
+                    .replace(/\b\w/g, l => l.toUpperCase()); 
+            },
+
+            showResults(matches) {
+                const list = this.els.resultsList;
+                list.innerHTML = '';
+                
+                // Show up to 50 results (increased from 20)
+                matches.slice(0, 50).forEach(file => {
+                    const prettyName = this.formatName(file.name);
+                    const div = document.createElement('div');
+                    div.className = "search-item p-3 bg-gray-800 border border-gray-700 rounded cursor-pointer transition-colors flex items-center gap-3 relative";
+                    div.innerHTML = `
+                        <div class="w-12 h-12 bg-gray-700 rounded flex items-center justify-center text-xs text-gray-500 overflow-hidden shrink-0">
+                            <!-- Image will load here -->
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm text-gray-200 font-bold truncate">${prettyName}</div>
+                            <div class="text-[10px] text-gray-500 truncate">${file.path}</div>
+                            <div class="flex gap-1 mt-1 h-3 w-full" id="palette-${file.sha}">
+                                <div class="w-full bg-gray-700/50 rounded animate-pulse"></div>
+                            </div>
+                        </div>
+                    `;
+                    div.onclick = () => {
+                        this.els.searchModal.classList.add('hidden');
+                        this.processImage(file.download_url, prettyName);
+                    };
+                    list.appendChild(div);
+
+                    const img = new Image();
+                    img.crossOrigin = "Anonymous";
+                    img.src = file.download_url;
+                    img.onload = () => {
+                        const dna = TextureEngine.analyze(img);
+                        const paletteContainer = document.getElementById(`palette-${file.sha}`);
+                        if(paletteContainer) {
+                            paletteContainer.innerHTML = '';
+                            dna.palette.forEach(c => {
+                                const swatch = document.createElement('div');
+                                swatch.className = 'mini-swatch flex-1 h-full rounded-sm';
+                                swatch.style.backgroundColor = c;
+                                paletteContainer.appendChild(swatch);
+                            });
+                        }
+                        div.querySelector('.w-12').innerHTML = `<img src="${file.download_url}" class="w-full h-full object-cover">`;
+                    };
+                });
+
+                document.getElementById('searchMeta').textContent = `Found ${matches.length} matches`;
+                this.els.searchModal.classList.remove('hidden');
+            },
+
+            processImage(url, name) {
+                this.setLoading(true, "Extracting DNA...");
+                const img = this.els.refImg;
+                img.crossOrigin = "Anonymous";
+                img.onload = () => {
+                    const dna = TextureEngine.analyze(img);
+                    
+                    this.state.palette = dna.palette;
+                    this.renderPalette();
+                    
+                    this.els.noiseLevel.value = Math.min(100, Math.floor(dna.edgeRatio * 200)); 
+                    document.getElementById('paletteSource').innerText = name ? name.substring(0, 20) : "Extracted";
+
+                    if(!this.state.lockedPattern) {
+                        this.setPattern(dna.suggestedPattern);
+                    }
+                    
+                    this.setLoading(false);
+                    if(this.state.model) this.synthesize(true);
+                };
+                img.onerror = () => { this.setLoading(false); this.notify("CORS Error", "error"); };
+                img.src = url;
+            },
+
+            // --- UI/UX ---
+
+            handleFileSelect(e) {
+                const f = e.target.files[0];
+                if(!f) return;
+                const r = new FileReader();
+                r.onload = (ev) => {
+                    try {
+                        const j = JSON.parse(ev.target.result);
+                        if(!j["minecraft:geometry"]) throw new Error("Invalid Geometry");
+                        this.state.model = j;
+                        document.getElementById('fileName').textContent = f.name;
+                        document.getElementById('modelStatus').textContent = "Loaded";
+                        document.getElementById('modelStatus').className = "text-[10px] text-green-400 bg-green-900 px-1.5 py-0.5 rounded border border-green-700";
+                        this.els.step2.classList.remove('step-locked');
+                        this.els.step2.classList.add('step-active');
+                        this.els.viewportMsg.style.display = 'none';
+                        this.synthesize();
+                    } catch(err) { this.notify(err.message, "error"); }
+                };
+                r.readAsText(f);
+            },
+
+            renderPalette() {
+                const box = this.els.paletteBox; box.innerHTML = '';
+                this.state.palette.forEach((c,i) => {
+                    const d = document.createElement('div');
+                    d.className = 'w-full h-full cursor-pointer hover:opacity-80';
+                    d.style.backgroundColor = c;
+                    d.onclick = () => { this.state.activeColor = i; this.els.manualColorPicker.click(); };
+                    box.appendChild(d);
+                });
+            },
+
+            setPattern(p, lock=false) {
+                this.state.pattern = p;
+                this.els.patternType.value = p;
+                if(lock) { this.state.lockedPattern = true; if(this.state.texture) this.synthesize(true); }
+            },
+
+            updateResolution() {
+                this.state.res = parseInt(this.els.resSelect.value);
+                if(this.state.texture) this.synthesize(true);
+            },
+
+            // --- CANVAS HANDLING ---
+
+            setupCanvasEvents() {
+                const w = this.els.canvasWrapper;
+                w.addEventListener('wheel', e => {
+                    e.preventDefault();
+                    this.state.view.scale = Math.max(0.1, Math.min(this.state.view.scale * (1 - e.deltaY * 0.001), 10));
+                    this.renderPreview();
+                });
+                w.addEventListener('pointerdown', e => {
+                    this.state.view.dragging = true;
+                    this.state.view.lx = e.clientX; this.state.view.ly = e.clientY;
+                    w.style.cursor = 'grabbing';
+                });
+                window.addEventListener('pointermove', e => {
+                    if(!this.state.view.dragging) return;
+                    this.state.view.x += e.clientX - this.state.view.lx;
+                    this.state.view.y += e.clientY - this.state.view.ly;
+                    this.state.view.lx = e.clientX; this.state.view.ly = e.clientY;
+                    this.renderPreview();
+                });
+                window.addEventListener('pointerup', () => {
+                    this.state.view.dragging = false; w.style.cursor = 'grab';
+                });
+            },
+
+            renderPreview() {
+                const cvs = this.els.mainCanvas;
+                if(!this.state.texture) {
+                    cvs.width = 0; cvs.height = 0;
                     return;
                 }
-            };
-            reader.readAsText(file);
-        }
-
-        function checkBedrockType(jsonString) {
-            try {
-                const data = JSON.parse(jsonString);
                 
-                // Check for Geometry
-                if (data["minecraft:geometry"]) {
-                    return { isValid: true };
-                }
+                // Draw internal res
+                cvs.width = this.state.res; cvs.height = this.state.res;
+                const ctx = this.ctx;
                 
-                // Identify wrong file types
-                if (data["minecraft:item"]) {
-                    return { isValid: false, error: "Error: This is an Item Definition file, not a Model. Please upload the .geo.json file." };
-                }
-                if (data["minecraft:block"]) {
-                    return { isValid: false, error: "Error: This is a Block Definition file, not a Model. Please upload the .geo.json file." };
-                }
-                if (data["minecraft:recipe_shaped"] || data["minecraft:recipe_shapeless"]) {
-                    return { isValid: false, error: "Error: This is a Recipe file." };
-                }
+                // 1. Draw Texture (Transparency preserved)
+                ctx.clearRect(0,0,cvs.width,cvs.height);
+                ctx.drawImage(this.state.texture, 0, 0);
 
-                return { isValid: false, error: "Invalid JSON: Could not find 'minecraft:geometry' inside." };
-            } catch (e) {
-                return { isValid: false, error: "Invalid JSON syntax." };
-            }
-        }
-
-        function setMode(mode) {
-            const settings = document.getElementById('settingsPanel');
-            const highRes = document.getElementById('highResPanel');
-            const geoWarn = document.getElementById('geoWarning');
-            const placeholder = document.getElementById('placeholderText');
-
-            if (mode === 'none') {
-                settings.classList.add('opacity-50', 'pointer-events-none');
-                highRes.classList.add('opacity-50', 'pointer-events-none');
-                placeholder.style.display = 'flex';
-                return;
-            }
-
-            placeholder.style.display = 'none';
-            settings.classList.remove('opacity-50', 'pointer-events-none');
-
-            if (mode === 'all') {
-                highRes.classList.remove('opacity-50', 'pointer-events-none');
-                geoWarn.classList.add('hidden');
-            } else {
-                highRes.classList.add('opacity-50', 'pointer-events-none');
-                geoWarn.classList.remove('hidden');
-            }
-        }
-
-        function requestRedraw() {
-            if (!currentFileContent) return;
-            if (currentFileType === 'obj') processOBJ(currentFileContent, true);
-            if (currentFileType === 'bbmodel') processBBModel(currentFileContent, true);
-            if (currentFileType === 'geo') processBedrockGeo(currentFileContent, true);
-        }
-
-        // ==========================================
-        // BEDROCK GEOMETRY LOGIC
-        // ==========================================
-        function processBedrockGeo(jsonString, isRedraw = false) {
-            try {
-                const data = JSON.parse(jsonString);
-                const geos = data["minecraft:geometry"] || [];
-                if (geos.length === 0) return false;
-                const geo = geos[0]; 
-
-                if (!isRedraw) {
-                    modelRes.w = geo.description.texture_width || 64;
-                    modelRes.h = geo.description.texture_height || 64;
-                    document.getElementById('fileInfo').classList.remove('hidden');
-                    document.getElementById('fileTypeLabel').textContent = "Bedrock Geometry";
-                    document.getElementById('fileResLabel').textContent = `${modelRes.w}x${modelRes.h}`;
+                // 2. Draw Wireframe
+                if(this.els.wireframeToggle.checked && this.state.model) {
+                    ctx.lineWidth = Math.max(1, this.state.res/256);
+                    ctx.strokeStyle = '#00ffaa';
+                    const geo = this.state.model["minecraft:geometry"][0];
+                    const s = this.state.res / (geo.description.texture_width||64);
+                    
+                    geo.bones?.forEach(b => b.cubes?.forEach(c => {
+                        if(Array.isArray(c.uv)) {
+                            const [u,v] = c.uv; const [w,h,d] = c.size;
+                            const rects = [[u+d,v+d,w,h],[u+d+w+d,v+d,w,h],[u,v+d,d,h],[u+d+w,v+d,d,h],[u+d,v,w,d],[u+d+w,v,w,d]];
+                            rects.forEach(([rx,ry,rw,rh]) => ctx.strokeRect(rx*s,ry*s,rw*s,rh*s));
+                        } else if(typeof c.uv === 'object') {
+                            Object.values(c.uv).forEach(f => { if(f.uv && f.uv_size) ctx.strokeRect(f.uv[0]*s,f.uv[1]*s,f.uv_size[0]*s,f.uv_size[1]*s); });
+                        }
+                    }));
                 }
 
-                canvas.width = modelRes.w;
-                canvas.height = modelRes.h;
-                clearCanvas();
-                setupStroke();
+                // CSS View Transform
+                cvs.style.transform = `translate(${this.state.view.x}px, ${this.state.view.y}px) scale(${this.state.view.scale})`;
+            },
+
+            fitView() {
+                const wrap = this.els.canvasWrapper;
+                const minDim = Math.min(wrap.clientWidth, wrap.clientHeight) - 40;
+                const scale = minDim / this.state.res;
+                this.state.view = { x: 0, y: 0, scale: scale, dragging: false };
+                this.renderPreview();
+            },
+
+            export() {
+                if(!this.state.texture) return;
+                const a = document.createElement('a');
+                a.download = `texture_${Date.now()}.png`;
+                a.href = this.state.texture.src;
+                a.click();
                 
-                drawGeoWireframe(ctx, geo, 1);
-
-                return true;
-            } catch (e) {
-                console.error(e);
-                return false;
-            }
-        }
-
-        function generateHighResGeo() {
-            if (currentFileType !== 'geo' || !currentFileContent) return;
-
-            try {
-                const data = JSON.parse(currentFileContent);
-                const targetRes = 512; 
+                // 1. Clone Model
+                const geo = JSON.parse(JSON.stringify(this.state.model));
+                const g = geo["minecraft:geometry"][0];
                 
-                const geos = data["minecraft:geometry"];
-                if (!geos) return alert("No geometry found.");
+                // 2. Calculate Scale Factor based on Target Res
+                const oldW = g.description.texture_width || 64;
+                const oldH = g.description.texture_height || 64;
+                const scaleX = this.state.res / oldW;
+                const scaleY = this.state.res / oldH;
 
-                const originalW = geos[0].description.texture_width || 64;
-                const originalH = geos[0].description.texture_height || 64;
-                const scaleX = targetRes / originalW;
-                const scaleY = targetRes / originalH;
+                // 3. Update Description
+                g.description.texture_width = this.state.res;
+                g.description.texture_height = this.state.res;
 
-                const hrCanvas = document.getElementById('highResCanvas');
-                hrCanvas.width = targetRes;
-                hrCanvas.height = targetRes;
-                const hrCtx = hrCanvas.getContext('2d');
-                hrCtx.clearRect(0, 0, targetRes, targetRes);
-                
-                hrCtx.strokeStyle = "#38bdf8"; 
-                hrCtx.lineWidth = 1.5; 
-                hrCtx.lineJoin = 'miter'; 
-                hrCtx.lineCap = 'butt';   
-
-                geos.forEach(geo => {
-                    geo.description.texture_width = targetRes;
-                    geo.description.texture_height = targetRes;
-
-                    if (geo.bones) {
-                        geo.bones.forEach(bone => {
-                            if (bone.cubes) {
-                                bone.cubes.forEach(cube => {
+                // 4. Convert Box UVs -> Per Face UVs & Scale All
+                if(g.bones) {
+                    g.bones.forEach(bone => {
+                        if(bone.cubes) {
+                            bone.cubes.forEach(cube => {
+                                if(Array.isArray(cube.uv)) {
+                                    // CONVERT BOX UV
+                                    const [u,v] = cube.uv;
+                                    const [w,h,d] = cube.size;
                                     
-                                    if (Array.isArray(cube.uv)) {
-                                        const [u, v] = cube.uv;
-                                        const [w, h, d] = cube.size;
+                                    // Create Per-Face Object
+                                    cube.uv = {
+                                        north: { uv: [(u+d)*scaleX, (v+d)*scaleY], uv_size: [w*scaleX, h*scaleY] },
+                                        south: { uv: [(u+d+w+d)*scaleX, (v+d)*scaleY], uv_size: [w*scaleX, h*scaleY] },
+                                        east:  { uv: [u*scaleX, (v+d)*scaleY], uv_size: [d*scaleX, h*scaleY] },
+                                        west:  { uv: [(u+d+w)*scaleX, (v+d)*scaleY], uv_size: [d*scaleX, h*scaleY] },
+                                        up:    { uv: [(u+d)*scaleX, v*scaleY], uv_size: [w*scaleX, d*scaleY] },
+                                        down:  { uv: [(u+d+w)*scaleX, v*scaleY], uv_size: [w*scaleX, d*scaleY] }
+                                    };
+                                } 
+                                else if (typeof cube.uv === 'object') {
+                                    // SCALE EXISTING PER-FACE
+                                    Object.values(cube.uv).forEach(face => {
+                                        if(face.uv && face.uv_size) {
+                                            face.uv[0] *= scaleX;
+                                            face.uv[1] *= scaleY;
+                                            face.uv_size[0] *= scaleX;
+                                            face.uv_size[1] *= scaleY;
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    });
+                }
 
-                                        const newUVs = {
-                                            north: { uv: [u + d, v + d], uv_size: [w, h] },
-                                            south: { uv: [u + d + w + d, v + d], uv_size: [w, h] },
-                                            east:  { uv: [u, v + d], uv_size: [d, h] },
-                                            west:  { uv: [u + d + w, v + d], uv_size: [d, h] },
-                                            up:    { uv: [u + d, v], uv_size: [w, d] },
-                                            down:  { uv: [u + d + w, v], uv_size: [w, d] }
-                                        };
+                // 5. Download
+                const b = new Blob([JSON.stringify(geo, null, 2)], {type:'application/json'});
+                const a2 = document.createElement('a');
+                a2.href = URL.createObjectURL(b);
+                a2.download = 'model.geo.json';
+                setTimeout(() => a2.click(), 500);
+            },
 
-                                        const scaledFaces = {};
-                                        Object.entries(newUVs).forEach(([faceName, faceData]) => {
-                                            const su = faceData.uv[0] * scaleX;
-                                            const sv = faceData.uv[1] * scaleY;
-                                            const sw = faceData.uv_size[0] * scaleX;
-                                            const sh = faceData.uv_size[1] * scaleY;
+            notify(msg, type) {
+                const t = document.createElement('div');
+                t.className = `px-3 py-2 rounded shadow-lg text-white text-xs ${type==='error'?'bg-red-900':'bg-green-900'} animate-bounce`;
+                t.innerText = msg;
+                this.els['toast-container'].appendChild(t);
+                setTimeout(() => t.remove(), 3000);
+            },
 
-                                            drawSharpRect(hrCtx, su, sv, sw, sh);
-
-                                            scaledFaces[faceName] = {
-                                                uv: [su, sv],
-                                                uv_size: [sw, sh]
-                                            };
-                                        });
-
-                                        cube.uv = scaledFaces;
-                                    } 
-                                    else if (typeof cube.uv === 'object') {
-                                        const faces = ['north','south','east','west','up','down'];
-                                        faces.forEach(faceName => {
-                                            if (cube.uv[faceName]) {
-                                                const faceData = cube.uv[faceName];
-                                                
-                                                if (faceData.uv && faceData.uv_size) {
-                                                    const oldU = faceData.uv[0];
-                                                    const oldV = faceData.uv[1];
-                                                    const oldW = faceData.uv_size[0];
-                                                    const oldH = faceData.uv_size[1];
-
-                                                    faceData.uv[0] = oldU * scaleX;
-                                                    faceData.uv[1] = oldV * scaleY;
-                                                    faceData.uv_size[0] = oldW * scaleX;
-                                                    faceData.uv_size[1] = oldH * scaleY;
-
-                                                    drawSharpRect(hrCtx, faceData.uv[0], faceData.uv[1], faceData.uv_size[0], faceData.uv_size[1]);
-                                                }
-                                            }
-                                        });
-                                    }
-                                });
-                            }
-                        });
-                    }
-                });
-
-                const linkImg = document.createElement('a');
-                linkImg.download = 'high_res_wireframe.png';
-                linkImg.href = hrCanvas.toDataURL('image/png');
-                document.body.appendChild(linkImg);
-                linkImg.click();
-                document.body.removeChild(linkImg);
-
-                setTimeout(() => {
-                    const jsonString = JSON.stringify(data, null, 2); 
-                    const blob = new Blob([jsonString], {type: "application/json"});
-                    const linkModel = document.createElement('a');
-                    linkModel.href = URL.createObjectURL(blob);
-                    linkModel.download = "model_high_res.geo.json";
-                    document.body.appendChild(linkModel);
-                    linkModel.click();
-                    document.body.removeChild(linkModel);
-                }, 500);
-
-            } catch (e) {
-                console.error(e);
-                alert("Error generating high res geo: " + e.message);
+            setLoading(show, txt) {
+                this.els.loaderText.textContent = txt;
+                this.els.loader.style.display = show ? 'flex' : 'none';
             }
-        }
+        };
 
-        function drawSharpRect(ctx, x, y, w, h) {
-            const xPos = Math.floor(x) + 0.5;
-            const yPos = Math.floor(y) + 0.5;
-            const wPos = Math.floor(w);
-            const hPos = Math.floor(h);
-
-            if (wPos <= 0 || hPos <= 0) return;
-
-            ctx.strokeRect(xPos, yPos, wPos, hPos);
-            ctx.beginPath(); 
-            ctx.moveTo(xPos, yPos); 
-            ctx.lineTo(xPos + wPos, yPos + hPos); 
-            ctx.stroke();
-        }
-
-        function drawGeoWireframe(context, geo, scale) {
-            if (geo.bones) {
-                geo.bones.forEach(bone => {
-                    if (bone.cubes) {
-                        bone.cubes.forEach(cube => {
-                            if (Array.isArray(cube.uv)) {
-                                drawBoxUV(context, cube.uv, cube.size, scale, scale);
-                            } else if (typeof cube.uv === 'object') {
-                                Object.values(cube.uv).forEach(f => {
-                                    if(f.uv && f.uv_size) {
-                                        const u = f.uv[0] * scale;
-                                        const v = f.uv[1] * scale;
-                                        const w = f.uv_size[0] * scale;
-                                        const h = f.uv_size[1] * scale;
-                                        drawSharpRect(context, u, v, w, h);
-                                    }
-                                });
-                            }
-                        });
-                    }
-                });
-            }
-        }
-
-        function drawBoxUV(context, uvOrigin, size, scaleX, scaleY) {
-            const u = uvOrigin[0]; const v = uvOrigin[1];
-            const w = size[0]; const h = size[1]; const d = size[2];
-
-            const faces = [
-                { x: u + d, y: v + d, w: w, h: h }, 
-                { x: u, y: v + d, w: d, h: h },     
-                { x: u + d, y: v, w: w, h: d },     
-                { x: u + d + w, y: v, w: w, h: d }, 
-                { x: u + d + w, y: v + d, w: d, h: h }, 
-                { x: u + d + w + d, y: v + d, w: w, h: h } 
-            ];
-
-            faces.forEach(f => {
-                const fx = f.x * scaleX; const fy = f.y * scaleY;
-                const fw = f.w * scaleX; const fh = f.h * scaleY;
-                drawSharpRect(context, fx, fy, fw, fh);
-            });
-        }
-
-        function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
-        function setupStroke() {
-            ctx.strokeStyle = document.getElementById('strokeColor').value;
-            ctx.lineWidth = parseInt(document.getElementById('strokeWidth').value);
-            ctx.lineJoin = 'round';
-        }
-
-        function processBBModel(jsonString, isRedraw){ /* Preview Logic Only */ }
-        function processOBJ(objText, isRedraw){ /* Preview Logic Only */ }
-        
-        function downloadImage() {
-            if (canvas.width === 0) return alert("Upload file first");
-            const link = document.createElement('a');
-            link.download = 'wireframe_texture.png';
-            link.href = canvas.toDataURL('image/png');
-            document.body.appendChild(link); link.click(); document.body.removeChild(link);
-        }
+        window.app = App;
+        window.onload = () => App.init();
     </script>
 </body>
 </html>
